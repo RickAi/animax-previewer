@@ -1,0 +1,8 @@
+@import './styles/base.css';
+@import './styles/canvas.css';
+@import './styles/sidebar.css';
+@import './styles/modals.css';
+@import './styles/inspector-core.css';
+@import './styles/inspector-lists.css';
+@import './styles/json-editor.css';
+@import './styles/utilities.css';

@@ -1,0 +1,197 @@
+.animax-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(2px);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 100;
+}
+
+.animax-overlay.show {
+  display: flex;
+}
+
+.animax-modal {
+  width: min(600px, 96vw);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--animax-line);
+  background: var(--bg-panel);
+  box-shadow: var(--animax-shadow);
+  overflow: hidden;
+}
+
+.animax-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px;
+  border-bottom: 1px solid var(--animax-line);
+}
+
+.animax-modal-head .t {
+  font-weight: 600;
+  font-size: 16px;
+}
+
+.animax-modal-body {
+  padding: 20px;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+
+.animax-modal-foot {
+  padding: 16px 20px;
+  border-top: 1px solid var(--animax-line);
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  background: var(--bg-app);
+}
+
+.animax-resource-url-modal {
+  width: min(680px, 96vw);
+}
+
+.animax-font-style-modal {
+  width: min(720px, 96vw);
+}
+
+.animax-resource-url-target {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  border: 1px solid var(--animax-line);
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+  padding: 12px;
+}
+
+.animax-resource-url-target span {
+  width: fit-content;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.08);
+  color: var(--animax-muted);
+  padding: 2px 7px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.animax-resource-url-target strong,
+.animax-resource-url-target em {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.animax-resource-url-target strong {
+  color: var(--animax-text);
+  font-family: var(--animax-mono);
+  font-size: 13px;
+  font-style: normal;
+}
+
+.animax-resource-url-target em {
+  color: var(--animax-muted);
+  font-size: 12px;
+  font-style: normal;
+}
+
+.animax-resource-url-field {
+  display: grid;
+  gap: 8px;
+}
+
+.animax-resource-url-field span {
+  color: var(--animax-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.animax-resource-url-note,
+.animax-resource-url-error {
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.animax-resource-url-note {
+  border: 1px solid rgba(96, 165, 250, 0.28);
+  background: rgba(37, 99, 235, 0.12);
+  color: #bfdbfe;
+}
+
+.animax-resource-url-error {
+  border: 1px solid rgba(251, 113, 133, 0.35);
+  background: rgba(244, 63, 94, 0.12);
+  color: #fecdd3;
+}
+
+.animax-font-style-current {
+  color: var(--animax-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.animax-font-style-current strong {
+  color: var(--animax-text);
+  font-family: var(--animax-mono);
+}
+
+.animax-font-style-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  gap: 10px;
+}
+
+.animax-font-style-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  border: 1px solid var(--animax-line);
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+  color: var(--animax-muted);
+  padding: 0 11px;
+  cursor: pointer;
+  transition:
+    border-color 0.18s ease,
+    background 0.18s ease,
+    color 0.18s ease;
+}
+
+.animax-font-style-option:hover {
+  border-color: rgba(147, 197, 253, 0.52);
+  background: rgba(96, 165, 250, 0.1);
+  color: var(--animax-text);
+}
+
+.animax-font-style-option.active {
+  border-color: rgba(147, 197, 253, 0.78);
+  background:
+    linear-gradient(180deg, rgba(96, 165, 250, 0.18), rgba(102, 99, 246, 0.12)), var(--bg-card);
+  color: #dbeafe;
+  box-shadow: 0 0 0 1px rgba(147, 197, 253, 0.18) inset;
+}
+
+.animax-font-style-option input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--animax-accent);
+}
+
+.animax-font-style-option span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 700;
+}

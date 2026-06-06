@@ -1,0 +1,650 @@
+.animax-main {
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: minmax(680px, 58%) minmax(420px, 1fr);
+  position: relative;
+  background: var(--bg-app);
+}
+
+.animax-canvas-area {
+  min-height: 0;
+  padding: 14px 16px 16px;
+  border-right: 1px solid var(--animax-line);
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 12px;
+  background: var(--bg-app);
+  container-type: inline-size;
+}
+
+.animax-canvas-toolbar {
+  display: grid;
+  grid-template-columns: auto auto minmax(8px, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+.animax-canvas-toolbar::-webkit-scrollbar {
+  display: none;
+}
+
+.animax-canvas-toolbar-metrics {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: max-content;
+}
+
+.animax-preview-bg-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border: 1px solid var(--animax-line);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  min-width: max-content;
+}
+
+.animax-preview-bg-label {
+  color: var(--animax-muted);
+  font-size: 12px;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.animax-preview-bg-swatches {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.animax-preview-bg-swatch {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid rgba(148, 163, 184, 0.36);
+  border-radius: 999px;
+  background: var(--animax-swatch-color);
+  cursor: pointer;
+  transition:
+    border-color 0.16s ease,
+    box-shadow 0.16s ease,
+    transform 0.16s ease;
+}
+
+.animax-preview-bg-swatch:first-child {
+  background:
+    linear-gradient(45deg, rgba(255, 255, 255, 0.18) 25%, transparent 25%) 0 0 / 8px 8px,
+    linear-gradient(45deg, transparent 75%, rgba(255, 255, 255, 0.18) 75%) 0 0 / 8px 8px,
+    linear-gradient(45deg, transparent 75%, rgba(255, 255, 255, 0.18) 75%) 4px 4px / 8px 8px,
+    linear-gradient(45deg, rgba(255, 255, 255, 0.18) 25%, transparent 25%) 4px 4px / 8px 8px,
+    #050505;
+}
+
+.animax-preview-bg-swatch:hover {
+  transform: translateY(-1px);
+  border-color: rgba(191, 219, 254, 0.86);
+}
+
+.animax-preview-bg-swatch.active {
+  border-color: #93c5fd;
+  box-shadow:
+    0 0 0 2px rgba(147, 197, 253, 0.18),
+    0 0 16px rgba(102, 99, 246, 0.28);
+}
+
+.animax-json-size-chip {
+  min-width: max-content;
+}
+
+@container (max-width: 760px) {
+  .animax-canvas-toolbar {
+    gap: 6px;
+  }
+
+  .animax-canvas-toolbar-metrics {
+    gap: 6px;
+  }
+
+  .animax-canvas-toolbar .animax-chip {
+    padding: 4px 7px;
+  }
+
+  .animax-btn.canvas-mode {
+    gap: 5px;
+    padding: 0 8px;
+  }
+
+  .animax-preview-bg-control {
+    gap: 6px;
+    padding: 4px 6px;
+  }
+
+  .animax-preview-bg-swatches {
+    gap: 4px;
+  }
+
+  .animax-preview-bg-swatch {
+    width: 20px;
+    height: 20px;
+  }
+}
+
+.animax-preview-bg-swatch.custom {
+  display: inline-block;
+  overflow: hidden;
+}
+
+.animax-preview-bg-swatch.custom::after {
+  content: '';
+  position: absolute;
+  inset: 5px;
+  border-radius: inherit;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+}
+
+.animax-preview-bg-swatch input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  padding: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.animax-canvas {
+  min-height: 0;
+  border: 1px solid var(--animax-line);
+  background:
+    linear-gradient(45deg, rgba(255, 255, 255, 0.03) 25%, transparent 25%) 0 0 / 18px 18px,
+    linear-gradient(45deg, transparent 75%, rgba(255, 255, 255, 0.03) 75%) 0 0 / 18px 18px,
+    linear-gradient(45deg, transparent 75%, rgba(255, 255, 255, 0.03) 75%) 9px 9px / 18px 18px,
+    linear-gradient(45deg, rgba(255, 255, 255, 0.03) 25%, transparent 25%) 9px 9px / 18px 18px;
+  background-color: #000; /* Darker background for canvas checkboard */
+  border-radius: var(--radius-md);
+  position: relative;
+  overflow: hidden;
+  box-shadow: none; /* Removed heavy shadow */
+}
+
+.animax-canvas.solid-bg {
+  background: var(--animax-preview-bg);
+}
+
+.animax-canvas-inner {
+  position: absolute;
+  inset: 0 0 84px;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+}
+
+.animax-canvas-stage {
+  position: relative;
+  display: grid;
+  place-items: center;
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.animax-canvas-stage.tap-inspect,
+.animax-canvas-stage.tap-inspect animax-view {
+  cursor: crosshair;
+}
+
+.animax-canvas-inner animax-view {
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.animax-editable-layer-preview {
+  position: absolute;
+  box-sizing: border-box;
+  pointer-events: none;
+  transform-box: border-box;
+}
+
+.animax-editable-layer-preview img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  user-select: none;
+}
+
+.animax-editable-layer-preview.text {
+  overflow: visible;
+  color: #fff;
+  font-weight: 700;
+  text-align: left;
+  white-space: pre-wrap;
+}
+
+.animax-editable-layer-preview.selected {
+  outline: 1px solid rgba(129, 126, 255, 0.95);
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.7);
+}
+
+.animax-editable-layer-preview em {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 6px);
+  max-width: 180px;
+  overflow: hidden;
+  border-radius: 5px;
+  background: rgba(102, 99, 246, 0.92);
+  color: #fff;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+  line-height: 1.35;
+  padding: 3px 6px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.animax-layer-bounds-overlay {
+  position: absolute;
+  z-index: 4;
+  border: 2px solid var(--animax-layer-bound-color, #93c5fd);
+  background: color-mix(in srgb, var(--animax-layer-bound-color, #93c5fd) 14%, transparent);
+  box-shadow:
+    0 0 0 1px rgba(15, 23, 42, 0.65),
+    0 0 22px color-mix(in srgb, var(--animax-layer-bound-color, #93c5fd) 35%, transparent);
+  pointer-events: none;
+}
+
+.animax-layer-bounds-overlay span {
+  position: absolute;
+  left: -2px;
+  bottom: calc(100% + 6px);
+  max-width: 240px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--animax-layer-bound-color, #93c5fd) 58%, transparent);
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.92);
+  color: color-mix(in srgb, var(--animax-layer-bound-color, #93c5fd) 68%, white);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.35;
+  padding: 3px 6px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.animax-layer-tap-hint {
+  position: absolute;
+  z-index: 5;
+  top: 10px;
+  left: 10px;
+  border: 1px solid rgba(147, 197, 253, 0.38);
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.82);
+  color: #dbeafe;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.35;
+  padding: 4px 8px;
+  pointer-events: none;
+}
+
+.animax-layer-tap-marker {
+  position: absolute;
+  z-index: 6;
+  width: 10px;
+  height: 10px;
+  border: 2px solid #93c5fd;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.9);
+  box-shadow:
+    0 0 0 3px rgba(147, 197, 253, 0.18),
+    0 0 18px rgba(147, 197, 253, 0.45);
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+
+.animax-layer-tap-marker.empty {
+  border-color: rgba(148, 163, 184, 0.78);
+  box-shadow:
+    0 0 0 3px rgba(148, 163, 184, 0.14),
+    0 0 18px rgba(148, 163, 184, 0.28);
+}
+
+.animax-layer-tap-popover {
+  position: absolute;
+  z-index: 7;
+  width: min(280px, calc(100% - 24px));
+  max-height: 240px;
+  overflow: hidden;
+  border: 1px solid rgba(147, 197, 253, 0.34);
+  border-radius: 10px;
+  background: rgba(18, 18, 22, 0.94);
+  box-shadow:
+    0 18px 40px rgba(0, 0, 0, 0.42),
+    0 0 0 1px rgba(255, 255, 255, 0.03) inset;
+  color: var(--animax-text);
+  pointer-events: auto;
+  backdrop-filter: blur(10px);
+}
+
+.animax-layer-tap-popover-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 10px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+  color: #f4f7ff;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.animax-layer-tap-close {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--animax-muted);
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  padding: 0;
+}
+
+.animax-layer-tap-close:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--animax-text);
+}
+
+.animax-layer-tap-empty {
+  padding: 12px 10px;
+  color: var(--animax-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.animax-layer-tap-list {
+  display: grid;
+  max-height: 195px;
+  overflow: auto;
+  padding: 6px;
+  gap: 5px;
+}
+
+.animax-layer-tap-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 7px;
+}
+
+.animax-layer-tap-item:hover {
+  border-color: rgba(147, 197, 253, 0.24);
+  background: rgba(147, 197, 253, 0.06);
+}
+
+.animax-layer-tap-kind {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.08);
+  color: var(--animax-muted);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.35;
+  padding: 2px 7px;
+}
+
+.animax-layer-tap-main {
+  min-width: 0;
+}
+
+.animax-layer-tap-main strong {
+  display: block;
+  overflow: hidden;
+  color: var(--animax-text);
+  font-family: var(--animax-mono);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.animax-layer-tap-meta {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 17px;
+  margin-top: 2px;
+}
+
+.animax-layer-tap-meta span {
+  overflow: hidden;
+  border: 1px solid rgba(129, 126, 255, 0.22);
+  border-radius: 999px;
+  background: rgba(102, 99, 246, 0.08);
+  color: var(--animax-muted);
+  font-size: 10px;
+  line-height: 1.25;
+  max-width: 98px;
+  padding: 1px 6px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.animax-layer-tap-locate {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid rgba(129, 126, 255, 0.36);
+  border-radius: 8px;
+  background: rgba(129, 126, 255, 0.1);
+  color: #d9d7ff;
+  cursor: pointer;
+  padding: 0;
+}
+
+.animax-layer-tap-locate:hover,
+.animax-layer-tap-locate.active {
+  border-color: rgba(147, 197, 253, 0.72);
+  background: rgba(147, 197, 253, 0.16);
+  color: #fff;
+}
+
+.animax-runtime-placeholder {
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  width: min(360px, 100%);
+  min-height: 160px;
+  padding: 20px;
+  border: 1px solid var(--animax-line);
+  border-radius: var(--radius-md);
+  background: rgba(18, 18, 18, 0.72);
+  color: var(--animax-muted);
+  text-align: center;
+}
+
+.animax-runtime-placeholder strong {
+  color: var(--animax-text);
+  font-size: 14px;
+}
+
+.animax-runtime-placeholder span {
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.animax-canvas-progress {
+  position: absolute;
+  left: 50%;
+  right: auto;
+  bottom: 18px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: min(calc(100% - 40px), 980px);
+  transform: translateX(-50%);
+  padding: 12px;
+  border: 1px solid var(--animax-line);
+  border-radius: var(--radius-md);
+  background: rgba(18, 18, 18, 0.85); /* Slightly transparent panel bg */
+  backdrop-filter: blur(8px);
+}
+
+.animax-progress-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.animax-canvas-progress input[type='range'] {
+  min-width: 0;
+  flex: 1;
+  width: 100%;
+  accent-color: var(--animax-accent);
+  cursor: pointer;
+}
+
+.animax-frame-indicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 88px;
+  height: 32px;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.045);
+  padding: 0 10px;
+}
+
+.animax-frame-indicator strong {
+  color: #f4f4f5;
+  font-family: var(--animax-mono);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.animax-frame-indicator strong span {
+  margin: 0 4px;
+  color: var(--animax-muted);
+  font-weight: 700;
+}
+
+.animax-canvas-card {
+  width: min(540px, 92%);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--animax-line);
+  background: var(--bg-card);
+  padding: 16px;
+}
+
+.animax-canvas-card .h {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.animax-canvas-card .h .t {
+  font-weight: 600;
+  color: var(--animax-text);
+}
+
+.animax-canvas-card .desc {
+  color: var(--animax-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.animax-highlight {
+  position: absolute;
+  inset: 18% 22%;
+  border: 2px solid var(--animax-accent);
+  border-radius: var(--radius-md);
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+}
+
+.animax-highlight-tag {
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  font-family: var(--animax-mono);
+  font-size: 12px;
+  color: #fff;
+  background: var(--animax-accent);
+  border-radius: 999px;
+  padding: 4px 10px;
+}
+
+.animax-side {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  background: var(--bg-panel); /* Side panel background */
+  border-left: 1px solid var(--animax-line); /* Ensure separation if needed, though grid gap handles it usually */
+}
+
+@media (max-width: 1180px) {
+  .animax-main {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(520px, 60vh) minmax(360px, 1fr);
+    overflow: auto;
+  }
+
+  .animax-canvas-area {
+    border-right: 0;
+    border-bottom: 1px solid var(--animax-line);
+  }
+
+  .animax-side {
+    border-left: 0;
+  }
+}
+
+@media (max-width: 760px) {
+  .animax-main {
+    grid-template-rows: minmax(460px, 58vh) minmax(320px, 1fr);
+  }
+
+  .animax-canvas-area {
+    padding: 10px;
+    gap: 10px;
+  }
+
+  .animax-canvas-inner {
+    padding: 12px;
+  }
+
+  .animax-canvas-progress {
+    bottom: 10px;
+    gap: 8px;
+    width: calc(100% - 20px);
+    padding: 10px;
+  }
+
+  .animax-frame-indicator {
+    min-width: 76px;
+  }
+}

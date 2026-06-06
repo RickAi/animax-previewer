@@ -1,0 +1,272 @@
+.animax-tabs {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--animax-line);
+  background: var(--bg-panel);
+}
+
+.animax-tab {
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  font-size: 13px;
+  color: var(--animax-muted);
+  background: transparent;
+  user-select: none;
+  cursor: pointer;
+  font-family: inherit;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: all 0.2s;
+}
+
+.animax-tab:hover {
+  color: var(--animax-text);
+  background: var(--bg-card-hover);
+}
+
+.animax-tab.soft-disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.animax-tab.active {
+  color: var(--animax-text);
+  background: var(--bg-card);
+  border-color: var(--animax-line);
+}
+
+.animax-panel {
+  display: block;
+  min-height: 0;
+  padding: 8px 16px 16px;
+  overflow: hidden;
+}
+
+.tabpane {
+  height: 100%;
+  min-height: 0;
+}
+
+.animax-section {
+  border: 1px solid var(--animax-line);
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.animax-section h3 {
+  margin: 0 0 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--animax-text);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.animax-section .subline {
+  margin-top: -8px;
+  margin-bottom: 12px;
+  color: var(--animax-muted);
+  font-size: 12px;
+}
+
+.animax-list {
+  display: grid;
+  gap: 8px;
+}
+
+.animax-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid var(--animax-line);
+  border-radius: var(--radius-sm);
+  padding: 10px;
+  background: var(--bg-app); /* Slightly darker item bg */
+}
+
+.animax-item .name {
+  font-weight: 500;
+  font-size: 13px;
+}
+
+.animax-item .meta {
+  font-family: var(--animax-mono);
+  font-size: 11px;
+  color: var(--animax-muted);
+  margin-top: 4px;
+}
+
+.animax-item .actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.animax-badge {
+  font-size: 11px;
+  border-radius: 999px;
+  padding: 2px 8px;
+  border: 1px solid var(--animax-line);
+  color: var(--animax-muted);
+  user-select: none;
+  background: var(--bg-panel);
+}
+
+.animax-badge.ok {
+  border-color: rgba(52, 211, 153, 0.3);
+  background: rgba(52, 211, 153, 0.1);
+  color: var(--animax-ok);
+}
+
+.animax-badge.warn {
+  border-color: rgba(251, 191, 36, 0.3);
+  background: rgba(251, 191, 36, 0.1);
+  color: var(--animax-warn);
+}
+
+.animax-badge.bad {
+  border-color: rgba(251, 113, 133, 0.3);
+  background: rgba(251, 113, 133, 0.1);
+  color: var(--animax-danger);
+}
+
+.animax-tree {
+  font-family: var(--animax-mono);
+  font-size: 12px;
+  color: var(--animax-text);
+  line-height: 1.8;
+}
+
+.animax-tree .muted {
+  color: var(--animax-muted);
+}
+
+.animax-tree .sel {
+  color: var(--animax-accent);
+  font-weight: 600;
+}
+
+.animax-kv {
+  display: grid;
+  grid-template-columns: 100px 1fr;
+  gap: 8px 12px;
+  font-size: 12px;
+  color: var(--animax-muted);
+}
+
+.animax-kv b {
+  color: var(--animax-text);
+  font-weight: 600;
+}
+
+.animax-mono {
+  font-family: var(--animax-mono);
+}
+
+.animax-editor {
+  border: 1px solid var(--animax-line);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--bg-app);
+}
+
+.animax-editor .toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--animax-line);
+  background: var(--bg-panel);
+  flex-wrap: wrap;
+}
+
+.animax-editor .body {
+  padding: 0;
+}
+
+.animax-editor textarea {
+  width: 100%;
+  min-height: 260px;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--animax-text);
+  font-family: var(--animax-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  padding: 12px;
+  resize: vertical;
+  white-space: pre;
+}
+
+.animax-hint {
+  font-size: 12px;
+  color: var(--animax-muted);
+}
+
+.animax-statusline {
+  font-family: var(--animax-mono);
+  font-size: 11px;
+  color: var(--animax-muted);
+  padding: 6px 12px;
+  border-top: 1px solid var(--animax-line);
+  background: var(--bg-panel);
+}
+
+.animax-chart {
+  border: 1px solid var(--animax-line);
+  border-radius: var(--radius-md);
+  background: var(--bg-app);
+  overflow: hidden;
+}
+
+.animax-chart svg {
+  display: block;
+  width: 100%;
+  height: 160px;
+}
+
+.animax-chart .footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--animax-line);
+  color: var(--animax-muted);
+  font-size: 11px;
+  font-family: var(--animax-mono);
+  background: var(--bg-panel);
+}
+
+.animax-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.animax-card {
+  border: 1px solid var(--animax-line);
+  border-radius: var(--radius-md);
+  background: var(--bg-app);
+  padding: 12px;
+}
+
+.animax-card .k {
+  color: var(--animax-muted);
+  font-size: 12px;
+}
+
+.animax-card .v {
+  font-family: var(--animax-mono);
+  font-size: 16px;
+  margin-top: 4px;
+  color: var(--animax-text);
+  font-weight: 600;
+}

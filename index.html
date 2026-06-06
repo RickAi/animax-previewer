@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AnimaX Previewer</title>
+    <style>
+      .file-launcher {
+        min-height: 100vh;
+        margin: 0;
+        display: grid;
+        place-items: center;
+        background: #08080b;
+        color: #f5f5f7;
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      .file-launcher__panel {
+        width: min(520px, calc(100vw - 32px));
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        border-radius: 8px;
+        padding: 24px;
+        background: #111116;
+        box-shadow: 0 18px 80px rgba(0, 0, 0, 0.45);
+      }
+
+      .file-launcher__panel h1 {
+        margin: 0 0 10px;
+        font-size: 20px;
+        letter-spacing: 0;
+      }
+
+      .file-launcher__panel p {
+        margin: 0 0 16px;
+        color: #b7b7c2;
+        line-height: 1.6;
+      }
+
+      .file-launcher__panel code {
+        display: block;
+        margin: 14px 0;
+        padding: 12px;
+        border-radius: 6px;
+        background: #050507;
+        color: #d7d7ff;
+        font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        overflow-x: auto;
+      }
+
+      .file-launcher__actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
+      .file-launcher__actions a {
+        display: inline-flex;
+        align-items: center;
+        height: 36px;
+        padding: 0 14px;
+        border-radius: 6px;
+        color: #fff;
+        background: #6366f1;
+        text-decoration: none;
+        font-size: 14px;
+        font-weight: 700;
+      }
+
+      .file-launcher__actions a.secondary {
+        background: rgba(255, 255, 255, 0.1);
+      }
+    </style>
+    <script>
+      if (window.location.protocol === 'file:') {
+        const devUrl = 'http://127.0.0.1:5173/';
+        const showLauncher = () => {
+          document.body.className = 'file-launcher';
+          document.body.innerHTML = `
+            <main class="file-launcher__panel">
+              <h1>AnimaX Previewer 需要通过本地服务打开</h1>
+              <p>这个文件是 Vite 应用入口，直接用 file:// 打开不会编译 TypeScript 和加载 WASM。请启动本地服务后访问 HTTP 地址。</p>
+              <code>cd /Users/yongbiaoai/Desktop/oss/animax_previewer
+npm run dev -- --host 127.0.0.1 --port 5173</code>
+              <div class="file-launcher__actions">
+                <a href="${devUrl}">打开本地预览</a>
+                <a class="secondary" href="https://RickAi.github.io/animax_previewer/">打开 GitHub Pages</a>
+              </div>
+            </main>
+          `;
+        };
+
+        fetch(devUrl, { mode: 'no-cors' })
+          .then(() => {
+            window.location.replace(devUrl);
+          })
+          .catch(() => {
+            if (document.readyState === 'loading') {
+              document.addEventListener('DOMContentLoaded', showLauncher, { once: true });
+            } else {
+              showLauncher();
+            }
+          });
+      }
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
