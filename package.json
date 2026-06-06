@@ -6,8 +6,7 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "tsc && vite build",
-    "preview": "vite preview --host 0.0.0.0",
-    "samples:generate": "node scripts/generate-samples.mjs"
+    "preview": "vite preview --host 0.0.0.0"
   },
   "dependencies": {
     "@animax-js/animax": "0.1.0-alpha.0",

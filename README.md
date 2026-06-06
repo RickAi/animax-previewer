@@ -33,18 +33,9 @@ The package versions are currently pinned to `0.1.0-alpha.0` because this is a p
 
 ## Public Samples
 
-The checked-in samples under `public/samples/` include two groups:
-
-- Exported AnimaX/Lottie examples under `public/samples/exports/`, including vector-only animations, image-backed animations, text/image compositions, and video-backed animations. Their related `images/` and `videos/` folders are checked in beside each JSON file so the samples can run on GitHub Pages without private infrastructure.
-- Self-contained public-safe fixtures generated for this repository. They cover shape animation, gradient fill, merge paths, text layers, precomposition, embedded image assets, and trim paths.
+The checked-in samples under `public/samples/` are exported AnimaX/Lottie examples, including vector-only animations, image-backed animations, text/image compositions, and video-backed animations. Their related `images/` and `videos/` folders are checked in beside each JSON file so the samples can run on GitHub Pages without private infrastructure.
 
 The internal sample URLs used by the original private previewer are intentionally not copied into this public repository. Many of those upstream examples are hosted on internal or company CDN/TOS domains and may include assets that should not be redistributed in an open-source repo.
-
-Regenerate the local sample pack with:
-
-```bash
-npm run samples:generate
-```
 
 ## Local Development
 
