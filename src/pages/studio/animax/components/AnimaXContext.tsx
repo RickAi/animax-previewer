@@ -680,6 +680,18 @@ const attachRelativePath = (file: File, relPath: string) => {
   return file;
 };
 
+const createNamedObjectUrl = (blob: Blob, fileName: string) => {
+  const objectUrl = URL.createObjectURL(blob);
+  const safeName = getUploadFileName(fileName || 'resource');
+  return safeName ? `${objectUrl}#${encodeURIComponent(safeName)}` : objectUrl;
+};
+
+const revokeNamedObjectUrl = (url: string) => {
+  const normalized = url.trim();
+  if (!normalized.startsWith('blob:')) return;
+  URL.revokeObjectURL(normalized.replace(/[?#].*$/, ''));
+};
+
 export const useAnimaX = () => {
   const context = useContext(AnimaXContext);
   if (!context) {
@@ -2275,7 +2287,7 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       : null;
 
     if (objectUrlRef.current && objectUrlRef.current !== normalizedSrc) {
-      URL.revokeObjectURL(objectUrlRef.current);
+      revokeNamedObjectUrl(objectUrlRef.current);
       objectUrlRef.current = null;
     }
     clearResourceEdits();
@@ -2708,8 +2720,8 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const createLocalResourceUrl = async (file: Blob, _uploadDir: string, filename: string) => {
-    const objectUrl = URL.createObjectURL(file);
-    pushLog(`[信息] 已创建本地资源映射：${filename}`);
+    const objectUrl = createNamedObjectUrl(file, filename);
+    pushLog(`[信息] 已创建本地资源映射：${filename} -> ${objectUrl}`);
     return objectUrl;
   };
 
@@ -2741,7 +2753,7 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     );
     if (nextUrl.startsWith('blob:')) {
       if (objectUrlRef.current && objectUrlRef.current !== nextUrl) {
-        URL.revokeObjectURL(objectUrlRef.current);
+        revokeNamedObjectUrl(objectUrlRef.current);
       }
       objectUrlRef.current = nextUrl;
     }
@@ -2758,8 +2770,8 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const handleDropFile = (file: File) => {
-    const nextObjectUrl = URL.createObjectURL(file);
-    if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
+    const nextObjectUrl = createNamedObjectUrl(file, file.name);
+    if (objectUrlRef.current) revokeNamedObjectUrl(objectUrlRef.current);
     objectUrlRef.current = nextObjectUrl;
 
     clearResourceEdits();
@@ -3603,7 +3615,7 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       alphaZipPromptResolverRef.current?.(false);
       alphaZipPromptResolverRef.current = null;
       if (objectUrlRef.current) {
-        URL.revokeObjectURL(objectUrlRef.current);
+        revokeNamedObjectUrl(objectUrlRef.current);
         objectUrlRef.current = null;
       }
       clearJsonAutoRefreshTimer();
