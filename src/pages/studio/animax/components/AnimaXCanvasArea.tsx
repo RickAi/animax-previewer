@@ -548,7 +548,10 @@ export const AnimaXCanvasArea: React.FC = () => {
           setIsDraggingFile(false);
           const file = e.dataTransfer.files?.[0];
           if (!file) return;
-          handleDropFile(file);
+          handleDropFile(file).catch((error) => {
+            const message = error instanceof Error ? error.message : String(error);
+            pushLog(`[错误] 文件加载失败：${message}`);
+          });
         }}
       >
         <div className="animax-canvas-inner">

@@ -160,7 +160,7 @@ interface AnimaXContextType {
   handleProgressChange: (nextFrame: number) => void;
   handleScrubStart: () => void;
   handleScrubEnd: () => void;
-  handleDropFile: (file: File) => void;
+  handleDropFile: (file: File) => Promise<void>;
   handlePickDirectory: (files: File[]) => Promise<void>;
   handlePickFiles: (files: File[]) => Promise<void>;
   handleTextDraftChange: (key: string, value: string) => void;
@@ -630,6 +630,10 @@ const preparePreviewJsonText = (jsonText: string, baseUrl: string) => {
 
 const isDirectoryAsset = (path: string) => /(^|\/)(images|videos|fonts)\//i.test(path);
 const RESOURCE_URL_VALIDATE_TIMEOUT_MS = 12000;
+const LOCAL_RESOURCE_CACHE_NAME = 'animax-previewer-local-resources-v1';
+const LOCAL_RESOURCE_PATH_PREFIX = '__local_resources__';
+
+let localResourceWorkerReadyPromise: Promise<ServiceWorkerRegistration> | null = null;
 
 const collectRelativeResourcePaths = (json: any) => {
   const paths = new Set<string>();
@@ -680,16 +684,129 @@ const attachRelativePath = (file: File, relPath: string) => {
   return file;
 };
 
-const createNamedObjectUrl = (blob: Blob, fileName: string) => {
-  const objectUrl = URL.createObjectURL(blob);
-  const safeName = getUploadFileName(fileName || 'resource');
-  return safeName ? `${objectUrl}#${encodeURIComponent(safeName)}` : objectUrl;
+const getLocalResourceMimeType = (fileName: string, blob: Blob) => {
+  if (blob.type) return blob.type;
+  if (/\.(lottie\.json|json)$/i.test(fileName)) return 'application/json';
+  if (/\.zip$/i.test(fileName)) return 'application/zip';
+  if (/\.png$/i.test(fileName)) return 'image/png';
+  if (/\.(jpe?g)$/i.test(fileName)) return 'image/jpeg';
+  if (/\.webp$/i.test(fileName)) return 'image/webp';
+  if (/\.gif$/i.test(fileName)) return 'image/gif';
+  if (/\.svg$/i.test(fileName)) return 'image/svg+xml';
+  if (/\.mp4$/i.test(fileName)) return 'video/mp4';
+  if (/\.webm$/i.test(fileName)) return 'video/webm';
+  if (/\.mov$/i.test(fileName)) return 'video/quicktime';
+  if (/\.woff2$/i.test(fileName)) return 'font/woff2';
+  if (/\.woff$/i.test(fileName)) return 'font/woff';
+  if (/\.ttf$/i.test(fileName)) return 'font/ttf';
+  if (/\.otf$/i.test(fileName)) return 'font/otf';
+  return 'application/octet-stream';
 };
 
-const revokeNamedObjectUrl = (url: string) => {
-  const normalized = url.trim();
-  if (!normalized.startsWith('blob:')) return;
-  URL.revokeObjectURL(normalized.replace(/[?#].*$/, ''));
+const getAppBaseUrl = () => new URL(import.meta.env.BASE_URL || '/', window.location.href);
+
+const waitForLocalResourceController = async (registration: ServiceWorkerRegistration) => {
+  if (navigator.serviceWorker.controller) return;
+  registration.active?.postMessage({ type: 'ANIMAX_CLAIM_CLIENTS' });
+
+  await new Promise<void>((resolve) => {
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      window.clearTimeout(timer);
+      navigator.serviceWorker.removeEventListener('controllerchange', finish);
+      resolve();
+    };
+    const timer = window.setTimeout(finish, 3000);
+    navigator.serviceWorker.addEventListener('controllerchange', finish);
+  });
+
+  if (!navigator.serviceWorker.controller) {
+    throw new Error('本地资源服务初始化失败，请刷新页面后重试');
+  }
+};
+
+const registerLocalResourceWorker = async () => {
+  const primaryWorkerUrl = new URL('local-resource-sw.js', getAppBaseUrl());
+  const fallbackWorkerUrl = new URL('/local-resource-sw.js', window.location.href);
+  const workerUrls =
+    primaryWorkerUrl.toString() === fallbackWorkerUrl.toString()
+      ? [primaryWorkerUrl]
+      : [primaryWorkerUrl, fallbackWorkerUrl];
+  let lastError: unknown = null;
+
+  for (const workerUrl of workerUrls) {
+    try {
+      return await navigator.serviceWorker.register(workerUrl.toString(), {
+        updateViaCache: 'none',
+      });
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error(String(lastError));
+};
+
+const ensureLocalResourceWorkerReady = async () => {
+  if (!/^https?:$/i.test(window.location.protocol)) {
+    throw new Error('本地资源 http 映射需要通过 http(s) 页面访问');
+  }
+  if (!('serviceWorker' in navigator) || !('caches' in window)) {
+    throw new Error('当前浏览器不支持本地资源 http 映射');
+  }
+
+  if (!localResourceWorkerReadyPromise) {
+    localResourceWorkerReadyPromise = (async () => {
+      await registerLocalResourceWorker();
+      const registration = await navigator.serviceWorker.ready;
+      await waitForLocalResourceController(registration);
+      return registration;
+    })().catch((error) => {
+      localResourceWorkerReadyPromise = null;
+      throw error;
+    });
+  }
+
+  return localResourceWorkerReadyPromise;
+};
+
+const getLocalResourceUrl = (uploadDir: string, fileName: string) => {
+  const safeDir = normalizeRelPath(uploadDir)
+    .split('/')
+    .map((part) => safeSegment(part))
+    .filter(Boolean)
+    .join('/');
+  const safeName = getUploadFileName(fileName || 'resource');
+  return new URL(
+    joinRelPath(LOCAL_RESOURCE_PATH_PREFIX, safeDir, safeName),
+    getAppBaseUrl(),
+  ).toString();
+};
+
+const isLocalResourceUrl = (value: string) => {
+  try {
+    return new URL(value.trim(), window.location.href).pathname.includes(
+      `/${LOCAL_RESOURCE_PATH_PREFIX}/`,
+    );
+  } catch {
+    return false;
+  }
+};
+
+const putLocalResource = async (url: string, file: Blob, fileName: string) => {
+  await ensureLocalResourceWorkerReady();
+  const cache = await caches.open(LOCAL_RESOURCE_CACHE_NAME);
+  await cache.put(
+    new Request(url),
+    new Response(file, {
+      headers: {
+        'Cache-Control': 'no-store',
+        'Content-Type': getLocalResourceMimeType(fileName, file),
+      },
+    }),
+  );
 };
 
 export const useAnimaX = () => {
@@ -706,7 +823,6 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const filePickerRef = useRef<HTMLInputElement>(null);
   const uploadFilePickerRef = useRef<HTMLInputElement>(null);
   const replacementPickerRef = useRef<HTMLInputElement>(null);
-  const objectUrlRef = useRef<string | null>(null);
   const replacementTargetRef = useRef<{ kind: ResourceKind; id: string } | null>(null);
   const pendingResourceReplacementRef = useRef<PendingResourceReplacement | null>(null);
   const currentFrameRef = useRef(0);
@@ -859,7 +975,11 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const canConfirm = useMemo(() => srcInput.trim().length > 0, [srcInput]);
   const canShareSrc = useMemo(() => {
     const shareSrc = src.trim();
-    return shareSrc.length > 0 && !/^(blob|data|file):/i.test(shareSrc);
+    return (
+      shareSrc.length > 0 &&
+      !/^(blob|data|file):/i.test(shareSrc) &&
+      !isLocalResourceUrl(shareSrc)
+    );
   }, [src]);
   const canApplyDynamicResourceCode = useMemo(
     () => dynamicResourceCode.trim().length > 0,
@@ -2286,10 +2406,6 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       ? pendingResourceReplacementRef.current
       : null;
 
-    if (objectUrlRef.current && objectUrlRef.current !== normalizedSrc) {
-      revokeNamedObjectUrl(objectUrlRef.current);
-      objectUrlRef.current = null;
-    }
     clearResourceEdits();
     clearLayerBoundsHighlight();
     if (pendingResourceReplacement) {
@@ -2580,6 +2696,11 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       pushLog('[警告] 当前资源不是可分享链接');
       return;
     }
+    if (isLocalResourceUrl(shareSrc)) {
+      toast.error('本地上传资源仅当前浏览器可用');
+      pushLog('[警告] 本地上传资源仅当前浏览器缓存可用，不能复制分享链接');
+      return;
+    }
 
     try {
       const shareUrl = new URL(window.location.href);
@@ -2719,10 +2840,12 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     scrubbingWasAnimatingRef.current = false;
   };
 
-  const createLocalResourceUrl = async (file: Blob, _uploadDir: string, filename: string) => {
-    const objectUrl = createNamedObjectUrl(file, filename);
-    pushLog(`[信息] 已创建本地资源映射：${filename} -> ${objectUrl}`);
-    return objectUrl;
+  const createLocalResourceUrl = async (file: Blob, uploadDir: string, filename: string) => {
+    const safeName = getUploadFileName(filename || 'resource');
+    const resourceUrl = getLocalResourceUrl(uploadDir, safeName);
+    await putLocalResource(resourceUrl, file, safeName);
+    pushLog(`[信息] 已创建本地资源映射：${safeName} -> ${resourceUrl}`);
+    return resourceUrl;
   };
 
   const uploadJsonAndReloadAnimation = async (
@@ -2751,12 +2874,6 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         fileName,
       ),
     );
-    if (nextUrl.startsWith('blob:')) {
-      if (objectUrlRef.current && objectUrlRef.current !== nextUrl) {
-        revokeNamedObjectUrl(objectUrlRef.current);
-      }
-      objectUrlRef.current = nextUrl;
-    }
     commitJsonEditorText(jsonText, true);
     loadAnimationSource(nextUrl, true);
     finishDirectoryProgress({
@@ -2769,18 +2886,19 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return nextUrl;
   };
 
-  const handleDropFile = (file: File) => {
-    const nextObjectUrl = createNamedObjectUrl(file, file.name);
-    if (objectUrlRef.current) revokeNamedObjectUrl(objectUrlRef.current);
-    objectUrlRef.current = nextObjectUrl;
-
+  const handleDropFile = async (file: File) => {
+    const nextUrl = await createLocalResourceUrl(
+      file,
+      `lottie/tmp/drop_${Date.now()}`,
+      file.name,
+    );
     clearResourceEdits();
     clearLayerBoundsHighlight();
     clearTextEdits();
     clearLayerTransformEdits();
     setTextDrafts({});
-    setSrcInput(nextObjectUrl);
-    setSrc(nextObjectUrl);
+    setSrcInput(nextUrl);
+    setSrc(nextUrl);
     if (/\.(lottie\.json|json)$/i.test(file.name)) {
       file
         .text()
@@ -3614,10 +3732,6 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return () => {
       alphaZipPromptResolverRef.current?.(false);
       alphaZipPromptResolverRef.current = null;
-      if (objectUrlRef.current) {
-        revokeNamedObjectUrl(objectUrlRef.current);
-        objectUrlRef.current = null;
-      }
       clearJsonAutoRefreshTimer();
       if (directoryUploadClearTimerRef.current !== null) {
         window.clearTimeout(directoryUploadClearTimerRef.current);
