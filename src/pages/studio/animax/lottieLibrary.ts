@@ -4,9 +4,19 @@ const toPublicUrl = (path: string) => {
   return new URL(publicPath, window.location.href).toString();
 };
 
-export const DEFAULT_ANIMAX_LOTTIE_URL = toPublicUrl('samples/orbit-dashboard.json');
+export const DEFAULT_ANIMAX_LOTTIE_URL = toPublicUrl(
+  'samples/exports/image_demo_2/lottie_18image.json',
+);
 
 const ANIMAX_PUBLIC_SAMPLE_PATHS = [
+  'samples/exports/image_demo_2/lottie_18image.json',
+  'samples/exports/vector_demo_1/walk.json',
+  'samples/exports/image_demo_3/button_popup_11image.json',
+  'samples/exports/video_demo_1/animax_poster_video.json',
+  'samples/exports/video_demo_2/lottery_1video.json',
+  'samples/exports/text_demo_1/lottie_4image.json',
+  'samples/exports/image_demo_1/anim_3image.json',
+  'samples/exports/vector_demo_2/coin.json',
   'samples/orbit-dashboard.json',
   'samples/gradient-cards.json',
   'samples/merge-paths.json',
