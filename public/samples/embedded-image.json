@@ -5,15 +5,25 @@
   "op": 120,
   "w": 512,
   "h": 512,
-  "nm": "AnimaX Public Sample",
+  "nm": "Embedded Image",
   "ddd": 0,
-  "assets": [],
+  "assets": [
+    {
+      "id": "img_badge",
+      "w": 180,
+      "h": 180,
+      "u": "",
+      "p": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxODAiIGhlaWdodD0iMTgwIiB2aWV3Qm94PSIwIDAgMTgwIDE4MCI+CiAgICA8ZGVmcz4KICAgICAgPGxpbmVhckdyYWRpZW50IGlkPSJnIiB4MT0iMjAiIHkxPSIyMCIgeDI9IjE2MCIgeTI9IjE2MCIgZ3JhZGllbnRVbml0cz0idXNlclNwYWNlT25Vc2UiPgogICAgICAgIDxzdG9wIG9mZnNldD0iMCIgc3RvcC1jb2xvcj0iIzdjM2FlZCIvPgogICAgICAgIDxzdG9wIG9mZnNldD0iMC41MiIgc3RvcC1jb2xvcj0iIzA2YjZkNCIvPgogICAgICAgIDxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzIyYzU1ZSIvPgogICAgICA8L2xpbmVhckdyYWRpZW50PgogICAgPC9kZWZzPgogICAgPHJlY3Qgd2lkdGg9IjE4MCIgaGVpZ2h0PSIxODAiIHJ4PSI0MiIgZmlsbD0iIzExMTgyNyIvPgogICAgPGNpcmNsZSBjeD0iOTAiIGN5PSI5MCIgcj0iNTQiIGZpbGw9InVybCgjZykiLz4KICAgIDxwYXRoIGQ9Ik02MyA5NWwyMCAyMCAzOC01NSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIxNCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+CiAgPC9zdmc+",
+      "e": 1
+    }
+  ],
   "layers": [
     {
       "ddd": 0,
       "ind": 1,
-      "ty": 4,
-      "nm": "Rotating Ring",
+      "ty": 2,
+      "nm": "Embedded Badge",
+      "refId": "img_badge",
       "sr": 1,
       "ks": {
         "o": {
@@ -26,10 +36,10 @@
             {
               "t": 0,
               "s": [
-                0
+                -10
               ],
               "e": [
-                360
+                10
               ],
               "i": {
                 "x": [
@@ -51,7 +61,7 @@
             {
               "t": 120,
               "s": [
-                360
+                10
               ]
             }
           ]
@@ -73,74 +83,49 @@
           ]
         },
         "s": {
-          "a": 0,
+          "a": 1,
           "k": [
-            100,
-            100,
-            100
+            {
+              "t": 0,
+              "s": [
+                82,
+                82,
+                100
+              ],
+              "e": [
+                112,
+                112,
+                100
+              ],
+              "i": {
+                "x": [
+                  0.667
+                ],
+                "y": [
+                  1
+                ]
+              },
+              "o": {
+                "x": [
+                  0.333
+                ],
+                "y": [
+                  0
+                ]
+              }
+            },
+            {
+              "t": 120,
+              "s": [
+                112,
+                112,
+                100
+              ]
+            }
           ]
         }
       },
       "ao": 0,
-      "shapes": [
-        {
-          "ty": "el",
-          "p": {
-            "a": 0,
-            "k": [
-              0,
-              0
-            ]
-          },
-          "s": {
-            "a": 0,
-            "k": [
-              220,
-              220
-            ]
-          },
-          "nm": "Ring Path"
-        },
-        {
-          "ty": "st",
-          "c": {
-            "a": 0,
-            "k": [
-              0.38,
-              0.4,
-              0.95,
-              1
-            ]
-          },
-          "o": {
-            "a": 0,
-            "k": 100
-          },
-          "w": {
-            "a": 0,
-            "k": 18
-          },
-          "lc": 2,
-          "lj": 2,
-          "nm": "Ring Stroke"
-        },
-        {
-          "ty": "tm",
-          "s": {
-            "a": 0,
-            "k": 0
-          },
-          "e": {
-            "a": 0,
-            "k": 72
-          },
-          "o": {
-            "a": 0,
-            "k": 0
-          },
-          "nm": "Trim Paths"
-        }
-      ],
       "ip": 0,
       "op": 120,
       "st": 0,
@@ -150,7 +135,7 @@
       "ddd": 0,
       "ind": 2,
       "ty": 4,
-      "nm": "Center Dot",
+      "nm": "Background",
       "sr": 1,
       "ks": {
         "o": {
@@ -189,7 +174,7 @@
       "ao": 0,
       "shapes": [
         {
-          "ty": "el",
+          "ty": "rc",
           "p": {
             "a": 0,
             "k": [
@@ -200,20 +185,24 @@
           "s": {
             "a": 0,
             "k": [
-              64,
-              64
+              512,
+              512
             ]
           },
-          "nm": "Dot Path"
+          "r": {
+            "a": 0,
+            "k": 0
+          },
+          "nm": "Background Path"
         },
         {
           "ty": "fl",
           "c": {
             "a": 0,
             "k": [
-              0.13,
-              0.77,
-              0.55,
+              0.025,
+              0.027,
+              0.04,
               1
             ]
           },
@@ -221,7 +210,7 @@
             "a": 0,
             "k": 100
           },
-          "nm": "Dot Fill"
+          "nm": "Background Fill"
         }
       ],
       "ip": 0,
