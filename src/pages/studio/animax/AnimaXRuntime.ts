@@ -1,6 +1,6 @@
-import { AnimaXViewElement, type AnimaXFontConfig } from '@animax-js/animax';
-import { AnimaXTextraModuleUrl } from '@animax-js/animax-textra';
-import { AnimaXVideoModuleUrl } from '@animax-js/animax-video';
+import { AnimaXViewElement, type AnimaXFontConfig } from '@lynx-js/animax';
+import { AnimaXTextraModuleUrl } from '@lynx-js/animax-textra';
+import { AnimaXVideoModuleUrl } from '@lynx-js/animax-video';
 
 const RUNTIME_RESOURCE_CACHE_DB = 'animax-runtime-resources';
 const RUNTIME_RESOURCE_CACHE_STORE = 'resources';

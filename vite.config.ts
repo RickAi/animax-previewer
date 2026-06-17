@@ -24,7 +24,7 @@ export default defineConfig(() => {
     ],
     assetsInclude: ['**/*.wasm'],
     optimizeDeps: {
-      exclude: ['@animax-js/animax', '@animax-js/animax-textra', '@animax-js/animax-video'],
+      exclude: ['@lynx-js/animax', '@lynx-js/animax-textra', '@lynx-js/animax-video'],
     },
     build: {
       sourcemap: true,

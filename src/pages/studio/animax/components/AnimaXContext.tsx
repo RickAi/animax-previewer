@@ -14,7 +14,7 @@ import {
   AnimaXResourcePropertyType,
   AnimaXViewElement,
   createAnimaXValueParam,
-} from '@animax-js/animax';
+} from '@lynx-js/animax';
 import JSZip from 'jszip';
 import toast from 'react-hot-toast';
 import { LottieParser, type CompositionModel } from '../../../../utils/lottie-parser';

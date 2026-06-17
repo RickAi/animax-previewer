@@ -25,9 +25,9 @@ Live demo: https://rickai.github.io/animax_previewer/
 
 This previewer uses the public AnimaX Web packages from npm:
 
-- `@animax-js/animax`: the browser custom element and WebAssembly-backed AnimaX renderer.
-- `@animax-js/animax-textra`: the optional Textra text layout WebAssembly module.
-- `@animax-js/animax-video`: the optional video playback WebAssembly module.
+- `@lynx-js/animax`: the browser custom element and WebAssembly-backed AnimaX renderer.
+- `@lynx-js/animax-textra`: the optional Textra text layout WebAssembly module.
+- `@lynx-js/animax-video`: the optional video playback WebAssembly module.
 
 The package versions are currently pinned to `0.1.0-alpha.0` because this is a personal preview build.
 

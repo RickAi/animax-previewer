@@ -1,5 +1,5 @@
 import React from 'react';
-import type { AnimaXViewElement, AnimaXViewProps } from '@animax-js/animax';
+import type { AnimaXViewElement, AnimaXViewProps } from '@lynx-js/animax';
 
 import type { CreateEditableLayerInput, LayerBoundsOverlay, LayerRow } from '../toolTypes';
 import { estimateOnelineTextSize, formatBytes } from '../toolUtils';
