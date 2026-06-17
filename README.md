@@ -2,7 +2,7 @@
 
 AnimaX Previewer is a personal preview build for trying AnimaX Web rendering in a browser. This repository is for demonstration only. It is not the official AnimaX website or product distribution; the official AnimaX web previewer is coming soon.
 
-Live demo: https://rickai.github.io/animax_previewer/
+Live demo: https://rickai.github.io/animax-previewer/
 
 ## What This Previewer Supports
 
@@ -77,16 +77,16 @@ npm run preview -- --host 127.0.0.1 --port 4173
 
 This repository is configured for GitHub Pages through GitHub Actions. The workflow builds the Vite app and deploys the `dist/` artifact.
 
-For the `RickAi/animax_previewer` repository, the Vite base path is automatically set to:
+For the `RickAi/animax-previewer` repository, the Vite base path is automatically set to:
 
 ```text
-/animax_previewer/
+/animax-previewer/
 ```
 
 The published page is:
 
 ```text
-https://rickai.github.io/animax_previewer/
+https://rickai.github.io/animax-previewer/
 ```
 
 ## Notes
