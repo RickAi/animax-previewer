@@ -150,3 +150,5 @@ The existing GitHub Pages address redirects to the Cloudflare site, preserving
 share query parameters. Production: https://animax-previewer.yongbiaoai.workers.dev/
 
 Additional storage policies to consider: require sign-in for a durable per-person quota (anonymous cookies and IPs cannot identify a person across devices/networks); deduplicate identical uploads by content hash; expire temporary uploads after a clearly disclosed retention period; reserve a separate permanent quota for built-in samples. These policies are not enabled: expiry must preserve shared links and built-in examples. Current lifetime reservations intentionally do not reset when records are hidden or requests fail. Never clear the global storage counter while objects remain in R2.
+
+Global Textra font fallback matches Kal: 12 families (Noto Sans SC, Thai, Bengali, Kannada, Gujarati, Devanagari, Telugu, Malayalam, Oriya, Arabic, Hebrew and Noto Emoji). All font files are mirrored in R2 and registered through `configureFonts` before the player mounts; the default is Kal’s `NotoSansSC-fallback.ttf`.

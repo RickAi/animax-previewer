@@ -10,8 +10,52 @@ const ANIMAX_FONT_CONFIG: AnimaXFontConfig = {
   defaultFamily: ANIMAX_DEFAULT_FONT_FAMILY,
   fonts: [
     {
-      family: ANIMAX_DEFAULT_FONT_FAMILY,
-      url: 'https://animax-previewer.yongbiaoai.workers.dev/api/objects/3510b866-ec85-4a39-8599-8629ad72a2e5/dce0b2147ad8-NotoSansCJKsc-Regular.otf',
+      family: 'Noto Sans SC',
+      url: 'https://animax-previewer.yongbiaoai.workers.dev/api/objects/e694cb92-77be-4b5d-8725-9ae35f444cdb/NotoSansSC-fallback.ttf',
+    },
+    {
+      family: 'Noto Sans Thai',
+      url: 'https://animax-previewer.yongbiaoai.workers.dev/api/objects/fa1c509c-d914-4f9f-baad-131929ca2819/NotoSansThai-Regular.ttf',
+    },
+    {
+      family: 'Noto Sans Bengali',
+      url: 'https://animax-previewer.yongbiaoai.workers.dev/api/objects/86fadcf2-0967-441a-a1b2-70de1aec9364/NotoSansBengali-Regular.ttf',
+    },
+    {
+      family: 'Noto Sans Kannada',
+      url: 'https://animax-previewer.yongbiaoai.workers.dev/api/objects/d6ffab6a-1ab3-43c0-baa9-a242835feccb/NotoSansKannada-Regular.ttf',
+    },
+    {
+      family: 'Noto Sans Gujarati',
+      url: 'https://animax-previewer.yongbiaoai.workers.dev/api/objects/3719fcfa-2531-4c0f-b974-64bced557c07/NotoSansGujarati-Regular.ttf',
+    },
+    {
+      family: 'Noto Sans Devanagari',
+      url: 'https://animax-previewer.yongbiaoai.workers.dev/api/objects/422fc5d2-128e-4829-9984-e888922dc329/NotoSansDevanagari-Regular.ttf',
+    },
+    {
+      family: 'Noto Sans Telugu',
+      url: 'https://animax-previewer.yongbiaoai.workers.dev/api/objects/e02b6d75-66fd-42eb-98e4-27578a785a2b/NotoSansTelugu-Regular.ttf',
+    },
+    {
+      family: 'Noto Sans Malayalam',
+      url: 'https://animax-previewer.yongbiaoai.workers.dev/api/objects/72d12ae7-28ec-4edb-9627-5729989bc828/NotoSansMalayalam-Regular.ttf',
+    },
+    {
+      family: 'Noto Sans Oriya',
+      url: 'https://animax-previewer.yongbiaoai.workers.dev/api/objects/b32f19fd-e8d7-4d4b-b494-9d41b9497173/NotoSansOriya-Regular.ttf',
+    },
+    {
+      family: 'Noto Sans Arabic',
+      url: 'https://animax-previewer.yongbiaoai.workers.dev/api/objects/5aa92d75-01eb-4acb-867a-2a1a659f92a1/NotoSansArabic-Regular.ttf',
+    },
+    {
+      family: 'Noto Sans Hebrew',
+      url: 'https://animax-previewer.yongbiaoai.workers.dev/api/objects/8083dcb8-d716-4261-a791-4154dcf4fe84/NotoSansHebrew-Regular.ttf',
+    },
+    {
+      family: 'Noto Emoji',
+      url: 'https://animax-previewer.yongbiaoai.workers.dev/api/objects/0fb47c6b-2ba7-429a-935e-f6d5c9ca02d5/Noto-COLRv1.ttf',
     },
   ],
 };
