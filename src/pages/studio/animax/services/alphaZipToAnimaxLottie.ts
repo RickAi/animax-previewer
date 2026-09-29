@@ -25,6 +25,11 @@ interface AlphaZipConfigMap {
   [sceneName: string]: AlphaVideoConfig;
 }
 
+export interface AlphaZipCompressionInfo {
+  algorithms: string[];
+  supported: boolean;
+}
+
 export interface AlphaZipBundleInfo {
   sceneName: string;
   width: number;
@@ -33,6 +38,7 @@ export interface AlphaZipBundleInfo {
   sourceVideoPath: string;
   rgbFrame: [number, number, number, number];
   alphaFrame: [number, number, number, number];
+  compression: AlphaZipCompressionInfo;
 }
 
 export interface AlphaZipConversionResult {
@@ -43,6 +49,51 @@ export interface AlphaZipConversionResult {
 
 function normalizeRelPath(path: string) {
   return path.replace(/\\/g, '/').replace(/^\/+/, '');
+}
+
+function getZipCompressionAlgorithm(method: number) {
+  if (method === 0) return 'store';
+  if (method === 8) return 'deflate';
+  if (method === 12) return 'bzip2';
+  if (method === 14) return 'lzma';
+  if (method === 93) return 'zstd';
+  return `method-${method}`;
+}
+
+async function inspectZipCompression(file: File): Promise<AlphaZipCompressionInfo> {
+  const data = new Uint8Array(await file.arrayBuffer());
+  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+  let eocdOffset = -1;
+  for (let offset = data.byteLength - 22; offset >= 0; offset -= 1) {
+    if (view.getUint32(offset, true) === 0x06054b50) {
+      eocdOffset = offset;
+      break;
+    }
+  }
+  if (eocdOffset < 0) {
+    return { algorithms: ['unknown'], supported: false };
+  }
+
+  const entryCount = view.getUint16(eocdOffset + 10, true);
+  let offset = view.getUint32(eocdOffset + 16, true);
+  const algorithms = new Set<string>();
+  for (let index = 0; index < entryCount && offset + 46 <= data.byteLength; index += 1) {
+    if (view.getUint32(offset, true) !== 0x02014b50) break;
+    const method = view.getUint16(offset + 10, true);
+    const fileNameLength = view.getUint16(offset + 28, true);
+    const extraLength = view.getUint16(offset + 30, true);
+    const commentLength = view.getUint16(offset + 32, true);
+    algorithms.add(getZipCompressionAlgorithm(method));
+    offset += 46 + fileNameLength + extraLength + commentLength;
+  }
+
+  const algorithmList = Array.from(algorithms).sort();
+  return {
+    algorithms: algorithmList.length > 0 ? algorithmList : ['unknown'],
+    supported:
+      algorithmList.length > 0 &&
+      algorithmList.every((item) => item === 'deflate' || item === 'store'),
+  };
 }
 
 function getFileStem(fileName: string) {
@@ -81,11 +132,14 @@ function findZipFile(zip: JSZip, rawPath: string) {
   return Object.values(zip.files).find((entry) => {
     if (entry.dir) return false;
     const relPath = normalizeRelPath(entry.name);
-    return lowerCandidates.has(relPath.toLowerCase()) || lowerCandidates.has(relPath.split('/').pop() ?? '');
+    return (
+      lowerCandidates.has(relPath.toLowerCase()) ||
+      lowerCandidates.has(relPath.split('/').pop() ?? '')
+    );
   });
 }
 
-async function parseAlphaZipInfo(zip: JSZip) {
+async function parseAlphaZipInfo(zip: JSZip, compression: AlphaZipCompressionInfo) {
   const configEntry = findZipFile(zip, 'config.json');
   if (!configEntry) return null;
 
@@ -123,28 +177,33 @@ async function parseAlphaZipInfo(zip: JSZip) {
       sourceVideoPath,
       rgbFrame,
       alphaFrame,
+      compression,
     } satisfies AlphaZipBundleInfo,
     videoEntry,
   };
 }
 
 export async function inspectAlphaZipBundle(file: File) {
+  const compression = await inspectZipCompression(file);
   const zip = await JSZip.loadAsync(file);
-  const parsed = await parseAlphaZipInfo(zip);
+  const parsed = await parseAlphaZipInfo(zip, compression);
   return parsed?.info ?? null;
 }
 
 export async function convertAlphaZipToAnimaxLottie(
   file: File,
 ): Promise<AlphaZipConversionResult | null> {
+  const compression = await inspectZipCompression(file);
   const zip = await JSZip.loadAsync(file);
-  const parsed = await parseAlphaZipInfo(zip);
+  const parsed = await parseAlphaZipInfo(zip, compression);
   if (!parsed) return null;
 
   const { info, videoEntry } = parsed;
   const videoBlob = await videoEntry.async('blob');
   const videoExtension =
-    normalizeRelPath(info.sourceVideoPath).match(/\.[a-zA-Z0-9]+$/)?.[0]?.toLowerCase() || '.mp4';
+    normalizeRelPath(info.sourceVideoPath)
+      .match(/\.[a-zA-Z0-9]+$/)?.[0]
+      ?.toLowerCase() || '.mp4';
   const videoFileName = `${DEFAULT_VIDEO_ID}${videoExtension}`;
   const animationName = getFileStem(file.name);
 

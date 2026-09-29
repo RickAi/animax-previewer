@@ -1,3 +1,5 @@
+import { inflate } from 'pako';
+
 import type {
   CreateEditableLayerInput,
   LayerTransform,
@@ -42,6 +44,399 @@ export function getDataUrlByteSize(value?: string) {
   } catch {
     return new TextEncoder().encode(payload).length;
   }
+}
+
+export interface ImageResourceFormat {
+  tags: string[];
+  title: string;
+}
+
+interface ParsedDataUrl {
+  mimeType: string;
+  isBase64: boolean;
+  payload: string;
+}
+
+interface PngFormatInfo {
+  bitDepth: number;
+  colorType: number;
+  hasPalette: boolean;
+  hasTransparencyChunk: boolean;
+  hasSrgb: boolean;
+  srgbIntent?: number;
+  hasIccProfile: boolean;
+  iccProfileName?: string;
+  iccProfileDescription?: string;
+  hasGamma: boolean;
+  gamma?: number;
+  hasChromaticity: boolean;
+  hasExif: boolean;
+}
+
+const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+
+const parseDataUrl = (value?: string): ParsedDataUrl | undefined => {
+  if (!value || !/^data:/i.test(value)) return undefined;
+  const commaIndex = value.indexOf(',');
+  if (commaIndex < 0) return undefined;
+
+  const meta = value.slice(5, commaIndex);
+  const payload = value.slice(commaIndex + 1).replace(/\s/g, '');
+  if (!payload) return undefined;
+
+  const metaParts = meta.split(';').filter(Boolean);
+  const mimeType =
+    metaParts
+      .find((part) => part.includes('/'))
+      ?.trim()
+      .toLowerCase() || 'text/plain';
+
+  return {
+    mimeType,
+    isBase64: metaParts.some((part) => part.toLowerCase() === 'base64'),
+    payload,
+  };
+};
+
+const decodeBase64Bytes = (payload: string) => {
+  try {
+    const binary = atob(payload);
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) {
+      bytes[index] = binary.charCodeAt(index);
+    }
+    return bytes;
+  } catch {
+    return undefined;
+  }
+};
+
+const readPngUInt32 = (bytes: Uint8Array, offset: number) =>
+  ((bytes[offset] << 24) |
+    (bytes[offset + 1] << 16) |
+    (bytes[offset + 2] << 8) |
+    bytes[offset + 3]) >>>
+  0;
+
+const readAscii = (bytes: Uint8Array, start: number, end: number) => {
+  let value = '';
+  const safeEnd = Math.min(end, bytes.length);
+  for (let index = start; index < safeEnd; index += 1) {
+    value += String.fromCharCode(bytes[index]);
+  }
+  return value;
+};
+
+const normalizeProfileText = (value: string) => {
+  const normalized = value.replace(/\0/g, '').replace(/\s+/g, ' ').trim();
+  return normalized || undefined;
+};
+
+const readUtf16Be = (bytes: Uint8Array, start: number, length: number) => {
+  const codeUnits: number[] = [];
+  const end = Math.min(start + length, bytes.length);
+  for (let index = start; index + 1 < end; index += 2) {
+    codeUnits.push((bytes[index] << 8) | bytes[index + 1]);
+  }
+  return normalizeProfileText(String.fromCharCode(...codeUnits));
+};
+
+const isPngSignature = (bytes: Uint8Array) =>
+  bytes.length >= PNG_SIGNATURE.length &&
+  PNG_SIGNATURE.every((value, index) => bytes[index] === value);
+
+const parseIccDescTag = (profile: Uint8Array, offset: number, size: number) => {
+  if (size < 12 || readAscii(profile, offset, offset + 4) !== 'desc') return undefined;
+  const descriptionLength = readPngUInt32(profile, offset + 8);
+  if (descriptionLength === 0) return undefined;
+
+  const textStart = offset + 12;
+  const textEnd = Math.min(textStart + descriptionLength, offset + size, profile.length);
+  return normalizeProfileText(readAscii(profile, textStart, textEnd));
+};
+
+const parseIccMlucTag = (profile: Uint8Array, offset: number, size: number) => {
+  if (size < 16 || readAscii(profile, offset, offset + 4) !== 'mluc') return undefined;
+
+  const recordCount = readPngUInt32(profile, offset + 8);
+  const recordSize = readPngUInt32(profile, offset + 12);
+  if (recordSize < 12) return undefined;
+
+  for (let index = 0; index < recordCount; index += 1) {
+    const recordOffset = offset + 16 + index * recordSize;
+    if (recordOffset + 12 > offset + size) break;
+
+    const textLength = readPngUInt32(profile, recordOffset + 4);
+    const textOffset = readPngUInt32(profile, recordOffset + 8);
+    const absoluteTextOffset = offset + textOffset;
+    if (absoluteTextOffset + textLength > offset + size) continue;
+
+    const text = readUtf16Be(profile, absoluteTextOffset, textLength);
+    if (text) return text;
+  }
+
+  return undefined;
+};
+
+const parseIccProfileDescription = (profile: Uint8Array) => {
+  if (profile.length < 132) return undefined;
+
+  const tagCount = readPngUInt32(profile, 128);
+  const tagTableEnd = 132 + tagCount * 12;
+  if (tagTableEnd > profile.length) return undefined;
+
+  let mlucDescription: string | undefined;
+
+  for (let index = 0; index < tagCount; index += 1) {
+    const tagOffset = 132 + index * 12;
+    const signature = readAscii(profile, tagOffset, tagOffset + 4);
+    const dataOffset = readPngUInt32(profile, tagOffset + 4);
+    const dataSize = readPngUInt32(profile, tagOffset + 8);
+    if (dataOffset + dataSize > profile.length) continue;
+
+    if (signature === 'desc') {
+      const description = parseIccDescTag(profile, dataOffset, dataSize);
+      if (description) return description;
+    } else if (signature === 'mluc') {
+      mlucDescription = mlucDescription ?? parseIccMlucTag(profile, dataOffset, dataSize);
+    }
+  }
+
+  return mlucDescription;
+};
+
+const readPngIccProfileDescription = (
+  bytes: Uint8Array,
+  dataOffset: number,
+  chunkLength: number,
+  profileEnd: number,
+) => {
+  const compressionMethodOffset = profileEnd + 1;
+  if (compressionMethodOffset >= dataOffset + chunkLength) return undefined;
+
+  const compressionMethod = bytes[compressionMethodOffset];
+  if (compressionMethod !== 0) return undefined;
+
+  const compressedStart = compressionMethodOffset + 1;
+  const compressedEnd = dataOffset + chunkLength;
+  if (compressedStart >= compressedEnd) return undefined;
+
+  try {
+    return parseIccProfileDescription(inflate(bytes.subarray(compressedStart, compressedEnd)));
+  } catch {
+    return undefined;
+  }
+};
+
+const parsePngFormatInfo = (bytes: Uint8Array): PngFormatInfo | undefined => {
+  if (!isPngSignature(bytes)) return undefined;
+
+  let offset = PNG_SIGNATURE.length;
+  let info: PngFormatInfo | undefined;
+
+  while (offset + 12 <= bytes.length) {
+    const length = readPngUInt32(bytes, offset);
+    const typeOffset = offset + 4;
+    const dataOffset = offset + 8;
+    const crcOffset = dataOffset + length;
+    if (crcOffset + 4 > bytes.length) break;
+
+    const chunkType = readAscii(bytes, typeOffset, typeOffset + 4);
+
+    if (chunkType === 'IHDR' && length >= 13) {
+      info = {
+        bitDepth: bytes[dataOffset + 8],
+        colorType: bytes[dataOffset + 9],
+        hasPalette: false,
+        hasTransparencyChunk: false,
+        hasSrgb: false,
+        hasIccProfile: false,
+        hasGamma: false,
+        hasChromaticity: false,
+        hasExif: false,
+      };
+    } else if (info) {
+      if (chunkType === 'PLTE') {
+        info.hasPalette = true;
+      } else if (chunkType === 'tRNS') {
+        info.hasTransparencyChunk = true;
+      } else if (chunkType === 'sRGB') {
+        info.hasSrgb = true;
+        info.srgbIntent = length > 0 ? bytes[dataOffset] : undefined;
+      } else if (chunkType === 'iCCP') {
+        info.hasIccProfile = true;
+        const profileEnd = bytes.indexOf(0, dataOffset);
+        if (profileEnd > dataOffset && profileEnd < dataOffset + length) {
+          info.iccProfileName = readAscii(bytes, dataOffset, profileEnd);
+          info.iccProfileDescription = readPngIccProfileDescription(
+            bytes,
+            dataOffset,
+            length,
+            profileEnd,
+          );
+        }
+      } else if (chunkType === 'gAMA' && length >= 4) {
+        info.hasGamma = true;
+        info.gamma = readPngUInt32(bytes, dataOffset) / 100000;
+      } else if (chunkType === 'cHRM') {
+        info.hasChromaticity = true;
+      } else if (chunkType === 'eXIf') {
+        info.hasExif = true;
+      }
+    }
+
+    offset = crcOffset + 4;
+    if (chunkType === 'IDAT' || chunkType === 'IEND') break;
+  }
+
+  return info;
+};
+
+const getPngPixelFormat = (info: PngFormatInfo) => {
+  if (info.colorType === 6 && info.bitDepth === 8) return 'PNG32';
+  if (info.colorType === 2 && info.bitDepth === 8) return 'PNG24';
+  if (info.colorType === 3) return info.bitDepth === 8 ? 'PNG8' : `PNG${info.bitDepth}`;
+  if (info.colorType === 0) return `PNG${info.bitDepth} Gray`;
+  if (info.colorType === 4) return `PNG${info.bitDepth * 2} Gray+A`;
+  if (info.colorType === 6) return `PNG${info.bitDepth * 4}`;
+  if (info.colorType === 2) return `PNG${info.bitDepth * 3}`;
+  return 'PNG';
+};
+
+const getPngColorDescription = (info: PngFormatInfo) => {
+  if (info.colorType === 0) return 'Grayscale';
+  if (info.colorType === 2) return info.hasTransparencyChunk ? 'RGB + tRNS' : 'RGB';
+  if (info.colorType === 3) return info.hasTransparencyChunk ? 'Indexed + tRNS' : 'Indexed';
+  if (info.colorType === 4) return 'Gray + Alpha';
+  if (info.colorType === 6) return 'RGBA';
+  return `Color type ${info.colorType}`;
+};
+
+const getPngColorProfileLabel = (info: PngFormatInfo) => {
+  if (info.hasSrgb) return 'sRGB';
+  if (info.iccProfileDescription) return info.iccProfileDescription;
+  if (info.iccProfileName && !/^icc(?: profile)?$/i.test(info.iccProfileName.trim())) {
+    return `iCCP ${info.iccProfileName}`;
+  }
+  if (info.hasIccProfile) return 'iCCP';
+  if (info.hasGamma && info.hasChromaticity) return 'gAMA+cHRM';
+  if (info.hasGamma) return 'gAMA';
+  if (info.colorType === 0) return 'raw Gray';
+  if (info.colorType === 2) return 'raw RGB';
+  if (info.colorType === 3) return 'raw Indexed';
+  if (info.colorType === 4) return 'raw Gray+A';
+  if (info.colorType === 6) return 'raw RGBA';
+  return 'raw';
+};
+
+const createPngFormat = (info: PngFormatInfo, sourceLabel: string): ImageResourceFormat => {
+  const pixelFormat = getPngPixelFormat(info);
+  const colorProfile = getPngColorProfileLabel(info);
+  const detailParts = [
+    pixelFormat,
+    `${info.bitDepth}-bit ${getPngColorDescription(info)}`,
+    `color type ${info.colorType}`,
+    colorProfile,
+  ];
+
+  if (info.hasSrgb && info.srgbIntent !== undefined) {
+    detailParts.push(`sRGB intent=${info.srgbIntent}`);
+  }
+  if (info.iccProfileDescription) {
+    detailParts.push(`ICC description=${info.iccProfileDescription}`);
+  }
+  if (info.hasIccProfile && info.iccProfileName) {
+    detailParts.push(`iCCP name=${info.iccProfileName}`);
+  }
+  if (info.hasExif) detailParts.push('eXIf');
+  if (info.hasGamma && info.gamma !== undefined) detailParts.push(`gamma=${info.gamma}`);
+  if (info.hasChromaticity) detailParts.push('cHRM');
+  detailParts.push(sourceLabel);
+
+  return {
+    tags: [pixelFormat, colorProfile],
+    title: detailParts.join(' · '),
+  };
+};
+
+const getExtensionFormat = (path: string) => {
+  const extension = getFileExtension(path).replace(/^\./, '').toUpperCase();
+  if (!extension) return undefined;
+  if (extension === 'JPG') return 'JPEG';
+  return extension;
+};
+
+const getMimeTypeFormat = (mimeType?: string | null) => {
+  const normalized = mimeType?.split(';')[0]?.trim().toLowerCase();
+  if (!normalized?.startsWith('image/')) return undefined;
+
+  const subtype = normalized.slice('image/'.length);
+  if (subtype === 'jpeg' || subtype === 'jpg') return 'JPEG';
+  if (subtype === 'svg+xml') return 'SVG';
+  return subtype.toUpperCase();
+};
+
+export function getImageResourceFormatFromBytes(
+  bytes: Uint8Array,
+  sourceLabel: string,
+  fallbackPath?: string,
+  mimeType?: string | null,
+) {
+  const pngInfo = parsePngFormatInfo(bytes);
+  if (pngInfo) return createPngFormat(pngInfo, sourceLabel);
+
+  if (bytes[0] === 0xff && bytes[1] === 0xd8) {
+    return { tags: ['JPEG'], title: `JPEG · ${sourceLabel}` };
+  }
+  if (readAscii(bytes, 0, 4) === 'RIFF') {
+    const webpHeader = readAscii(bytes, 8, 12);
+    if (webpHeader === 'WEBP') return { tags: ['WebP'], title: `WebP · ${sourceLabel}` };
+  }
+  const gifHeader = readAscii(bytes, 0, 6);
+  if (gifHeader === 'GIF87a' || gifHeader === 'GIF89a') {
+    return { tags: ['GIF'], title: `${gifHeader} · ${sourceLabel}` };
+  }
+
+  const fallbackFormat = getMimeTypeFormat(mimeType) || getExtensionFormat(fallbackPath ?? '');
+  if (!fallbackFormat) return undefined;
+  return {
+    tags: [fallbackFormat],
+    title: `${fallbackFormat} · ${sourceLabel}`,
+  };
+}
+
+export function getImageResourceFormat(source?: string, fallbackPath?: string) {
+  const trimmedSource = source?.trim() ?? '';
+  const dataUrl = parseDataUrl(trimmedSource);
+
+  if (dataUrl) {
+    if (dataUrl.isBase64) {
+      const bytes = decodeBase64Bytes(dataUrl.payload);
+      if (bytes) {
+        const bytesFormat = getImageResourceFormatFromBytes(
+          bytes,
+          'base64',
+          fallbackPath,
+          dataUrl.mimeType,
+        );
+        if (bytesFormat) return bytesFormat;
+      }
+    }
+
+    const mimeFormat = getMimeTypeFormat(dataUrl.mimeType) || dataUrl.mimeType;
+    return {
+      tags: [mimeFormat],
+      title: `${dataUrl.mimeType} · ${dataUrl.isBase64 ? 'base64' : 'data URL'}`,
+    };
+  }
+
+  const extensionFormat =
+    getExtensionFormat(trimmedSource) || getExtensionFormat(fallbackPath ?? '');
+  if (!extensionFormat) return undefined;
+  return {
+    tags: [extensionFormat],
+    title: `${extensionFormat} · URL/path resource`,
+  };
 }
 
 export function resolveResourceUrl(
@@ -638,14 +1033,25 @@ export function updateJsonResourcePath(
   kind: ResourceKind,
   id: string,
   nextUrl: string,
+  packPath?: string,
 ) {
   const parsed = JSON.parse(jsonText) as any;
+  const splitPackPath = (value: string) => {
+    const normalized = value.trim().replace(/\\/g, '/').replace(/^\/+/, '');
+    const index = normalized.lastIndexOf('/');
+    if (index < 0) return { dir: '', fileName: normalized };
+    return {
+      dir: `${normalized.slice(0, index + 1)}`,
+      fileName: normalized.slice(index + 1),
+    };
+  };
 
   if (kind === 'image' && Array.isArray(parsed.assets)) {
     const asset = parsed.assets.find((item: any) => item.id === id);
     if (asset) {
-      asset.u = '';
-      asset.p = nextUrl;
+      const nextPath = packPath ? splitPackPath(packPath) : null;
+      asset.u = nextPath ? nextPath.dir : '';
+      asset.p = nextPath ? nextPath.fileName : nextUrl;
       asset.e = 0;
     }
   }
@@ -653,8 +1059,9 @@ export function updateJsonResourcePath(
   if (kind === 'video' && Array.isArray(parsed.videos)) {
     const asset = parsed.videos.find((item: any) => item.id === id);
     if (asset) {
-      asset.u = '';
-      asset.p = nextUrl;
+      const nextPath = packPath ? splitPackPath(packPath) : null;
+      asset.u = nextPath ? nextPath.dir : '';
+      asset.p = nextPath ? nextPath.fileName : nextUrl;
       asset.e = 0;
     }
   }

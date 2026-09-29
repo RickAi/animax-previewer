@@ -63,6 +63,8 @@ export interface ResourceEdit {
   url: string;
   fileName: string;
   file?: File;
+  packPath?: string;
+  local?: boolean;
 }
 
 export interface AssetRow {
@@ -70,13 +72,76 @@ export interface AssetRow {
   id: string;
   name: string;
   detail: string;
+  resourcePath?: string;
   style?: string;
   origin?: number;
   sizeBytes?: number;
   sizeLabel?: string;
+  formatTags?: string[];
+  formatTitle?: string;
   refCount: number;
   status: 'ok' | 'mapped' | 'missing' | 'unused';
   previewUrl?: string;
+  check?: ResourceCheckResult;
+}
+
+export type ResourceCheckIssueCode = 'image-jpg' | 'video-b-frames';
+
+export interface ResourceCheckIssue {
+  code: ResourceCheckIssueCode;
+  message: string;
+  fixLabel: string;
+  fixable?: boolean;
+}
+
+export interface ResourceCheckResult {
+  status: 'idle' | 'checking' | 'ok' | 'warning' | 'error';
+  issues: ResourceCheckIssue[];
+  message?: string;
+}
+
+export type VideoIframeMode = 'frames' | 'seconds' | 'frameNumbers';
+
+export interface VideoProcessOptions {
+  iframeMode?: VideoIframeMode;
+  iframeIntervalFrames?: number;
+  iframeIntervalSeconds?: number;
+  iframeFrameNumbers?: string;
+  noBFrames?: boolean;
+}
+
+export interface VideoProcessProgress {
+  stage: 'loading' | 'writing' | 'transcoding' | 'reading';
+  message: string;
+  progress?: number;
+  log?: string;
+}
+
+export interface ProcessedVideoResource {
+  file: File;
+  fileName: string;
+  packPath: string;
+  blobUrl: string;
+  originalSizeBytes?: number;
+  outputSizeBytes: number;
+}
+
+export interface ProcessedImageResource {
+  file: File;
+  fileName: string;
+  packPath: string;
+  blobUrl: string;
+  originalSizeBytes?: number;
+  outputSizeBytes: number;
+}
+
+export interface VideoResourceInfo {
+  durationSeconds: number | null;
+  frameRate: number | null;
+  totalFrames: number | null;
+  totalFramesEstimated: boolean;
+  hasBFrames?: boolean;
+  bFrameCount?: number;
 }
 
 export interface TextLayerRow {

@@ -1,7 +1,7 @@
 .animax-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.6);
+  background: var(--animax-modal-backdrop);
   backdrop-filter: blur(2px);
   display: none;
   align-items: center;
@@ -51,6 +51,655 @@
   justify-content: flex-end;
   gap: 12px;
   background: var(--bg-app);
+}
+
+.animax-video-process-modal {
+  width: min(640px, 96vw);
+}
+
+.animax-video-process-meta {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 8px 12px;
+  align-items: center;
+  font-size: 13px;
+}
+
+.animax-video-process-meta span {
+  color: var(--animax-muted);
+}
+
+.animax-video-process-meta strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--animax-text);
+  font-family: var(--animax-mono);
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.animax-video-process-field {
+  display: grid;
+  grid-template-columns: 1fr 110px;
+  gap: 12px;
+  align-items: center;
+  color: var(--animax-muted);
+  font-size: 13px;
+}
+
+.animax-video-process-field input {
+  width: 100%;
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  color: var(--animax-text);
+  font-family: var(--animax-mono);
+  font-size: 13px;
+  outline: none;
+  padding: 7px 9px;
+}
+
+.animax-video-process-field input:focus {
+  border-color: var(--animax-accent);
+}
+
+.animax-video-process-error {
+  margin-top: 12px;
+  border: 1px solid rgba(251, 113, 133, 0.42);
+  border-radius: var(--radius-sm);
+  background: rgba(251, 113, 133, 0.12);
+  color: var(--animax-danger);
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 9px 10px;
+}
+
+.animax-video-process-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--animax-muted);
+  font-size: 13px;
+}
+
+.animax-video-process-track {
+  height: 7px;
+  margin-top: 12px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.animax-video-process-bar {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #817eff, #14b8a6);
+  transition: width 0.2s ease;
+}
+
+.animax-video-process-note {
+  margin-top: 10px;
+  color: var(--animax-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.animax-video-process-log {
+  margin-top: 10px;
+  overflow: hidden;
+  border: 1px solid var(--animax-line);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  color: var(--animax-muted);
+  font-family: var(--animax-mono);
+  font-size: 11px;
+  line-height: 1.45;
+  padding: 8px 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.animax-video-process-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid color-mix(in srgb, var(--animax-muted) 22%, transparent);
+  border-top-color: var(--animax-accent);
+  border-radius: 999px;
+  animation: spin 0.8s linear infinite;
+}
+
+.animax-upload-modal {
+  width: min(760px, 96vw);
+  border-color: var(--animax-line);
+  background: var(--animax-panel);
+  box-shadow: var(--animax-shadow);
+}
+
+.animax-upload-overlay {
+  background: color-mix(in srgb, var(--bg-app) 74%, transparent);
+  backdrop-filter: blur(7px) saturate(0.82);
+}
+
+.animax-upload-modal .animax-modal-head {
+  border-bottom-color: var(--animax-line);
+  background: var(--animax-panel);
+  padding: 18px 20px;
+}
+
+.animax-upload-modal .animax-modal-head .t {
+  font-size: 17px;
+  font-weight: 750;
+}
+
+.animax-upload-modal .animax-modal-body {
+  background: var(--animax-panel);
+  padding: 24px;
+}
+
+.animax-upload-modal .animax-modal-foot {
+  border-top-color: var(--animax-line);
+  background: var(--animax-panel);
+  padding: 18px 24px;
+}
+
+.animax-upload-body {
+  gap: 12px;
+}
+
+.animax-upload-dropzone {
+  width: 100%;
+  min-height: 310px;
+  border: 1px solid color-mix(in srgb, var(--animax-accent) 52%, var(--animax-line));
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(
+      circle at 50% 0%,
+      color-mix(in srgb, var(--animax-accent) 18%, transparent),
+      transparent 42%
+    ),
+    color-mix(in srgb, var(--animax-accent) 4%, var(--animax-panel));
+  color: var(--animax-text);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  padding: 26px;
+  outline: none;
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--bg-panel) 80%, transparent),
+    0 18px 42px color-mix(in srgb, var(--animax-accent) 12%, transparent);
+  transition:
+    border-color 0.16s ease,
+    background 0.16s ease,
+    box-shadow 0.16s ease,
+    transform 0.16s ease;
+}
+
+.animax-upload-dropzone:hover,
+.animax-upload-dropzone:focus-visible,
+.animax-upload-dropzone.dragging {
+  border-color: color-mix(in srgb, var(--animax-accent) 70%, var(--animax-line));
+  background:
+    radial-gradient(
+      circle at 50% 0%,
+      color-mix(in srgb, var(--animax-accent) 24%, transparent),
+      transparent 44%
+    ),
+    color-mix(in srgb, var(--animax-accent) 7%, var(--animax-panel));
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--bg-panel) 84%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--animax-accent) 28%, transparent),
+    0 20px 46px color-mix(in srgb, var(--animax-accent) 16%, transparent);
+}
+
+.animax-upload-dropzone.dragging {
+  transform: translateY(-1px);
+}
+
+.animax-upload-dropzone.selected {
+  border-style: solid;
+}
+
+.animax-upload-dropzone.error {
+  border-color: rgba(251, 113, 133, 0.55);
+}
+
+.animax-upload-empty,
+.animax-upload-selected {
+  width: min(460px, 100%);
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  text-align: center;
+}
+
+.animax-upload-empty strong,
+.animax-upload-selected strong {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--animax-text);
+  font-size: 20px;
+  font-weight: 750;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.animax-upload-cloud,
+.animax-upload-file-icon {
+  width: 64px;
+  height: 64px;
+  border: 1px solid rgba(129, 126, 255, 0.42);
+  border-radius: 20px;
+  background: rgba(102, 99, 246, 0.18);
+  color: #c7d2fe;
+  display: grid;
+  place-items: center;
+}
+
+.animax-upload-subtitle,
+.animax-upload-selected em {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--animax-muted);
+  font-size: 13px;
+  font-style: normal;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+}
+
+.animax-upload-subtitle {
+  white-space: normal;
+}
+
+.animax-upload-selected em {
+  white-space: nowrap;
+}
+
+.animax-upload-inline-action {
+  border: 0;
+  background: transparent;
+  color: var(--animax-accent-chip-text);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 750;
+  margin-left: 2px;
+  padding: 0;
+  text-decoration: underline;
+  text-decoration-color: rgba(129, 126, 255, 0.58);
+  text-underline-offset: 3px;
+}
+
+.animax-upload-inline-action:hover,
+.animax-upload-inline-action:focus-visible {
+  color: var(--animax-accent-hover);
+  outline: none;
+  text-decoration-color: rgba(158, 154, 255, 0.9);
+}
+
+.animax-upload-kind {
+  border: 1px solid rgba(129, 126, 255, 0.32);
+  border-radius: 999px;
+  background: rgba(102, 99, 246, 0.12);
+  color: var(--animax-accent-chip-text);
+  font-size: 11px;
+  font-weight: 800;
+  padding: 3px 8px;
+}
+
+.animax-upload-selected-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.animax-upload-error {
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.animax-upload-error {
+  border: 1px solid rgba(251, 113, 133, 0.35);
+  background: rgba(244, 63, 94, 0.12);
+  color: var(--animax-danger-text);
+}
+
+.animax-repack-modal {
+  width: min(560px, 96vw);
+}
+
+.animax-repack-subtitle {
+  margin-top: 4px;
+  color: var(--animax-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.animax-repack-body {
+  gap: 12px;
+}
+
+.animax-repack-source {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.035);
+  padding: 11px 12px;
+}
+
+.animax-repack-source span {
+  color: var(--animax-muted);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.animax-repack-source strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--animax-text);
+  font-family: var(--animax-mono);
+  font-size: 12px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.animax-repack-option {
+  position: relative;
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  gap: 12px;
+  align-items: start;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.035);
+  cursor: pointer;
+  padding: 14px;
+  transition:
+    border-color 0.16s ease,
+    background 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+.animax-repack-option:hover {
+  border-color: rgba(129, 126, 255, 0.5);
+  background: rgba(129, 126, 255, 0.08);
+}
+
+.animax-repack-option.selected {
+  border-color: rgba(129, 126, 255, 0.76);
+  background: rgba(102, 99, 246, 0.13);
+  box-shadow: 0 0 0 1px rgba(129, 126, 255, 0.12) inset;
+}
+
+.animax-repack-option input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.animax-repack-checkbox {
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--animax-line2);
+  border-radius: 5px;
+  background: var(--animax-input-bg);
+  display: grid;
+  place-items: center;
+}
+
+.animax-repack-option.selected .animax-repack-checkbox {
+  border-color: #8b88ff;
+  background: #6663f6;
+}
+
+.animax-repack-option.selected .animax-repack-checkbox::after {
+  width: 8px;
+  height: 5px;
+  border-bottom: 2px solid #fff;
+  border-left: 2px solid #fff;
+  content: '';
+  transform: rotate(-45deg) translate(1px, -1px);
+}
+
+.animax-repack-option-copy {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.animax-repack-option-copy strong {
+  color: var(--animax-text);
+  font-size: 14px;
+  font-weight: 760;
+}
+
+.animax-repack-option-copy em {
+  color: var(--animax-muted);
+  font-size: 12px;
+  font-style: normal;
+  line-height: 1.45;
+}
+
+.animax-package-records-overlay {
+  align-items: stretch;
+  background: transparent;
+  backdrop-filter: none;
+  justify-content: flex-end;
+  padding: 0;
+}
+
+.animax-package-records-overlay.closing {
+  animation: animax-package-records-overlay-out 0.22s ease forwards;
+  pointer-events: none;
+}
+
+.animax-package-records-modal {
+  width: min(560px, 92vw);
+  height: 100%;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  border-right: 0;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  animation: animax-package-records-slide-in 0.22s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.animax-package-records-overlay.closing .animax-package-records-modal {
+  animation: animax-package-records-slide-out 0.22s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+.animax-package-records-modal .animax-modal-head {
+  min-width: 0;
+}
+
+.animax-package-records-body {
+  min-height: 0;
+  gap: 14px;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.animax-package-records-search {
+  width: 100%;
+  height: 42px;
+  border: 1px solid var(--animax-line);
+  border-radius: var(--radius-sm);
+  outline: none;
+  background: var(--animax-input-bg);
+  color: var(--animax-text);
+  font: inherit;
+  font-size: 13px;
+  padding: 0 12px;
+}
+
+.animax-package-records-search:focus {
+  border-color: rgba(129, 126, 255, 0.72);
+}
+
+.animax-package-records-search::placeholder {
+  color: #6b7280;
+}
+
+.animax-package-records-list {
+  min-height: 0;
+  max-height: none;
+  overflow-y: auto;
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  padding-right: 2px;
+}
+
+.animax-package-records-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.animax-package-records-list::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.animax-package-record {
+  min-width: 0;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.035);
+  color: inherit;
+  cursor: pointer;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  text-align: left;
+  transition:
+    border-color 0.16s ease,
+    background 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+.animax-package-record:hover,
+.animax-package-record:focus-visible {
+  border-color: rgba(129, 126, 255, 0.58);
+  background: rgba(102, 99, 246, 0.1);
+  outline: none;
+}
+
+.animax-package-record.active {
+  border-color: rgba(129, 126, 255, 0.78);
+  background: rgba(102, 99, 246, 0.16);
+  box-shadow: 0 0 0 1px rgba(129, 126, 255, 0.12) inset;
+}
+
+.animax-package-record-main {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.animax-package-record-main strong,
+.animax-package-record-main em,
+.animax-package-record-main span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.animax-package-record-main strong {
+  color: var(--animax-text);
+  font-size: 13px;
+  font-weight: 760;
+}
+
+.animax-package-record-main em {
+  color: var(--animax-muted);
+  font-family: var(--animax-mono);
+  font-size: 11px;
+  font-style: normal;
+}
+
+.animax-package-record-main span {
+  color: rgba(156, 163, 175, 0.82);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.animax-package-record-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.animax-package-records-empty {
+  border: 1px dashed rgba(255, 255, 255, 0.16);
+  border-radius: var(--radius-sm);
+  color: var(--animax-muted);
+  font-size: 14px;
+  font-weight: 700;
+  padding: 36px 16px;
+  text-align: center;
+}
+
+@keyframes animax-package-records-slide-in {
+  from {
+    transform: translateX(100%);
+  }
+
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes animax-package-records-slide-out {
+  from {
+    transform: translateX(0);
+  }
+
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes animax-package-records-overlay-out {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animax-package-records-modal,
+  .animax-package-records-overlay.closing .animax-package-records-modal,
+  .animax-package-records-overlay.closing {
+    animation-duration: 0.01ms;
+  }
+}
+
+@media (max-width: 720px) {
+  .animax-upload-dropzone {
+    min-height: 240px;
+    padding: 20px;
+  }
+
+  .animax-package-record {
+    grid-template-columns: 1fr;
+  }
+
+  .animax-package-record-actions {
+    justify-content: flex-end;
+  }
 }
 
 .animax-resource-url-modal {
@@ -124,13 +773,13 @@
 .animax-resource-url-note {
   border: 1px solid rgba(96, 165, 250, 0.28);
   background: rgba(37, 99, 235, 0.12);
-  color: #bfdbfe;
+  color: var(--animax-info-text);
 }
 
 .animax-resource-url-error {
   border: 1px solid rgba(251, 113, 133, 0.35);
   background: rgba(244, 63, 94, 0.12);
-  color: #fecdd3;
+  color: var(--animax-danger-text);
 }
 
 .animax-font-style-current {
@@ -177,7 +826,7 @@
   border-color: rgba(147, 197, 253, 0.78);
   background:
     linear-gradient(180deg, rgba(96, 165, 250, 0.18), rgba(102, 99, 246, 0.12)), var(--bg-card);
-  color: #dbeafe;
+  color: var(--animax-text);
   box-shadow: 0 0 0 1px rgba(147, 197, 253, 0.18) inset;
 }
 

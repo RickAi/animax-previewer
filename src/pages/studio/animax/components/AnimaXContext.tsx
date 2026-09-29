@@ -17,44 +17,87 @@ import {
 } from '@lynx-js/animax';
 import JSZip from 'jszip';
 import toast from 'react-hot-toast';
-import { LottieParser, type CompositionModel } from '../../../../utils/lottie-parser';
 import { ensureAnimaXRuntimeInitialized, type AnimaXRuntimeStatus } from '../AnimaXRuntime';
 import { ANIMAX_RANDOM_LOTTIE_URLS, DEFAULT_ANIMAX_LOTTIE_URL } from '../lottieLibrary';
+import { getLocationParam } from '../../../../utils/locationParams';
 import {
   convertAlphaZipToAnimaxLottie,
   inspectAlphaZipBundle,
   type AlphaZipBundleInfo,
 } from '../services/alphaZipToAnimaxLottie';
-import { createAnimaXRepack, downloadBlob, type RepackResult } from '../services/repack';
+import {
+  addAnimaXCdnHistoryUrl,
+  copyPlainTextToClipboard,
+  createAnimaXShareUrl,
+  createAnimaXShareText,
+  readAnimaXCdnHistory,
+  removeAnimaXCdnHistoryUrl,
+  type AnimaXCdnHistoryItem,
+} from '../services/cdnHistory';
+import {
+  analyzeLottieJsonText,
+  inspectLottieJsonText,
+  type LottieAnalysisResult,
+  type LottieAnalysisWorkerResponse,
+  type LottieCompositionSummary,
+  type LottieJsonInspection,
+} from '../services/lottieAnalysis';
+import {
+  createAnimaXDownloadBundle,
+  createAnimaXRepack,
+  downloadBlob,
+  type RepackResult,
+} from '../services/repack';
+import {
+  createVideoBFramesCheckResult,
+  fileToDataUrl,
+  getImageResourceCheck,
+  getVideoResourceCheckSignature,
+  hasFixableIssue,
+  isBase64ResourcePath,
+  isHttpResourcePath,
+  RESOURCE_CHECK_OK,
+} from '../services/resourceCheck';
+import {
+  probeVideoResource,
+  processImageToPng8Resource,
+  processVideoResource,
+} from '../services/videoProcess';
 import type {
   AnimaXToolTab,
   AssetRow,
   CreateEditableLayerInput,
   EditableLayerDraftPreview,
-  EditableLayerKind,
   JsonPreviewStatus,
   LayerBoundsOverlay,
   LayerTransform,
   LayerRow,
   LayerTransformStaticState,
   PreviewEditableLayerOptions,
+  ProcessedImageResource,
+  ProcessedVideoResource,
+  ResourceCheckResult,
   ResourceEdit,
   ResourceKind,
   TextLayerRow,
+  VideoProcessOptions,
+  VideoProcessProgress,
+  VideoResourceInfo,
 } from '../toolTypes';
 import {
   addJsonEditableLayer,
-  collectTextLayers,
   createResourceKey,
   ensureHttpsUrl,
+  formatBytes,
   formatKilobytes,
   formatResourceSourceLabel,
   getDataUrlByteSize,
   getFileExtension,
-  readLayerStaticTransform,
-  readLayerTransformStaticState,
+  getImageResourceFormat,
+  getImageResourceFormatFromBytes,
   resolveResourceUrl,
   safeSegment,
+  type ImageResourceFormat,
   updateJsonFontStyle,
   updateJsonLayerName,
   updateJsonLayerTransform,
@@ -62,6 +105,25 @@ import {
   updateJsonResourcePath,
   updateJsonTextLayerValue,
 } from '../toolUtils';
+
+type JsonAnalysisStatus = 'pending' | 'ready' | 'error';
+
+type JsonAnalysisState = LottieAnalysisResult & {
+  status: JsonAnalysisStatus;
+  error: string;
+};
+
+interface LottieLoadStatus {
+  tone: 'loading' | 'success' | 'error';
+  label: string;
+  detail: string;
+}
+
+interface PreviewStageStatus {
+  visible: boolean;
+  title: string;
+  detail: string;
+}
 
 interface AnimaXContextType {
   animRef: React.MutableRefObject<AnimaXViewElement | null>;
@@ -108,12 +170,18 @@ interface AnimaXContextType {
   jsonEditorText: string;
   jsonPreviewStatus: JsonPreviewStatus;
   jsonSizeBytes: number;
+  jsonAnalysisStatus: JsonAnalysisStatus;
+  jsonAnalysisError: string;
+  lottieLoadStatus: LottieLoadStatus;
+  previewStageStatus: PreviewStageStatus;
   parsedJson: any;
-  composition: CompositionModel | null;
+  composition: LottieCompositionSummary | null;
   textLayerRows: TextLayerRow[];
   layerRows: LayerRow[];
   textDrafts: Record<string, string>;
   assetRows: AssetRow[];
+  resourceWarningCount: number;
+  isFixingResources: boolean;
   activeLayerBoundsKeys: string[];
   layerBoundsOverlays: LayerBoundsOverlay[];
   selectedLayerKey: string;
@@ -130,16 +198,25 @@ interface AnimaXContextType {
 
   isDraggingFile: boolean;
   setIsDraggingFile: React.Dispatch<React.SetStateAction<boolean>>;
+  uploadDialogOpen: boolean;
+  pendingUploadSelection: PendingUploadSelection | null;
+  uploadDialogError: string;
+  isUploadDialogConfirming: boolean;
   directoryUploadProgress: DirectoryUploadProgress | null;
   isDirectoryUploading: boolean;
   runtimeReady: boolean;
   runtimeStatus: AnimaXRuntimeStatus | null;
   runtimeError: string | null;
+  isAnimationReady: boolean;
+  repackDialogOpen: boolean;
+  packageRecordsOpen: boolean;
+  packageRecords: AnimaXCdnHistoryItem[];
 
   canConfirm: boolean;
   canApplyDynamicResourceCode: boolean;
   canRepack: boolean;
   isRepacking: boolean;
+  isDownloadingLottie: boolean;
   canRefreshJsonPreview: boolean;
   canResetJsonEditor: boolean;
   canRandomLottie: boolean;
@@ -154,15 +231,28 @@ interface AnimaXContextType {
   handleRefreshJsonPreview: () => void;
   handleResetJsonEditor: () => void;
   handleLoadRandomLottie: () => Promise<void>;
-  handleRepack: () => Promise<void>;
+  handleOpenRepackDialog: () => void;
+  handleCloseRepackDialog: () => void;
+  handleRepack: (options?: RepackOutputOptions) => Promise<void>;
+  handleDownloadInputLottie: () => Promise<void>;
+  handleOpenPackageRecords: () => void;
+  handleClosePackageRecords: () => void;
+  handleLoadPackageRecord: (url: string) => Promise<void>;
+  handleCopyPackageRecordShareLink: (url: string) => Promise<void>;
+  handleRemovePackageRecord: (url: string) => void;
   handleCopyShareLink: () => Promise<void>;
+  handleCopyCardShareLink: () => Promise<void>;
   handleTogglePlay: () => void;
   handleProgressChange: (nextFrame: number) => void;
   handleScrubStart: () => void;
   handleScrubEnd: () => void;
-  handleDropFile: (file: File) => Promise<void>;
-  handlePickDirectory: (files: File[]) => Promise<void>;
-  handlePickFiles: (files: File[]) => Promise<void>;
+  handleOpenUploadDialog: () => void;
+  handleCloseUploadDialog: () => void;
+  handleResetUploadSelection: () => void;
+  handleSelectUploadFiles: (files: File[], source?: UploadSelectionSource) => void;
+  handleSelectUploadDirectory: (files: File[], source?: UploadSelectionSource) => void;
+  handleUploadDrop: (dataTransfer: DataTransfer) => Promise<void>;
+  handleConfirmUploadSelection: () => Promise<void>;
   handleTextDraftChange: (key: string, value: string) => void;
   handleTextLayerUpdate: (row: TextLayerRow) => void;
   handleToggleLayerBounds: (row: LayerRow) => void;
@@ -188,6 +278,21 @@ interface AnimaXContextType {
   handleReplaceResource: (row: AssetRow) => void;
   handleReplaceResourceFromUrl: (row: AssetRow, rawUrl: string) => Promise<void>;
   handleReplaceFontStyle: (row: AssetRow, nextStyle: string) => Promise<void>;
+  handleProcessVideoResource: (
+    row: AssetRow,
+    options: VideoProcessOptions,
+    onProgress?: (progress: VideoProcessProgress) => void,
+  ) => Promise<ProcessedVideoResource>;
+  handleProbeVideoResource: (
+    row: AssetRow,
+    onProgress?: (progress: VideoProcessProgress) => void,
+  ) => Promise<VideoResourceInfo>;
+  handleApplyProcessedVideoResource: (
+    row: AssetRow,
+    processed: ProcessedVideoResource,
+  ) => Promise<void>;
+  handleFixResource: (row: AssetRow) => Promise<void>;
+  handleFixAllResources: () => Promise<void>;
   handleReplacementFile: (file: File) => Promise<void>;
   handleCycleSpeed: () => void;
   handleToggleLoop: () => void;
@@ -206,6 +311,7 @@ interface DirectoryUploadProgress {
   detail: string;
   completed: number;
   total: number;
+  startedAt?: number;
 }
 
 interface PendingResourceReplacement {
@@ -220,14 +326,15 @@ interface FontStyleEdit {
   style: string;
 }
 
+type LayerTransformPropertyGroup = 'position' | 'anchor' | 'scale' | 'rotation' | 'opacity';
+
 interface LayerTransformEdit {
   key: string;
   layerName: string;
   transform: LayerTransform;
+  propertyGroups?: LayerTransformPropertyGroup[];
   visible?: boolean;
 }
-
-type LayerTransformPropertyGroup = 'position' | 'anchor' | 'scale' | 'rotation' | 'opacity';
 
 interface UploadPickedDirectoryOptions {
   pendingResourceReplacement?: PendingResourceReplacement;
@@ -254,6 +361,9 @@ const getResourceSize = (
 };
 
 const getResourceEditDetail = (edit: ResourceEdit) => {
+  if (edit.local && edit.packPath) {
+    return `${edit.fileName} / 本地预览，待打包到 ${edit.packPath}`;
+  }
   const sourceLabel = formatResourceSourceLabel(edit.url);
   return edit.fileName && edit.fileName !== sourceLabel
     ? `${edit.fileName} / ${sourceLabel}`
@@ -344,177 +454,6 @@ const getFontOriginFromJsonText = (jsonText: string, fontName: string) => {
 const getFontOriginLogLabel = (origin: number | undefined) =>
   origin === undefined ? '未声明' : String(origin);
 
-const getEditableLayerKind = (layer: any): EditableLayerKind | undefined => {
-  const kind = layer?.__kalEditableKind;
-  return kind === 'image' || kind === 'text' || kind === 'solid' ? kind : undefined;
-};
-
-const getLayerTypeLabel = (typeCode: number, layer?: any) => {
-  if (getEditableLayerKind(layer) === 'solid') return 'Solid';
-
-  switch (typeCode) {
-    case 0:
-      return '预合成';
-    case 1:
-      return '纯色';
-    case 2:
-      return '图片';
-    case 3:
-      return '空对象';
-    case 4:
-      return '形状';
-    case 5:
-      return '文本';
-    case 6:
-      return '音频';
-    case 13:
-      return '相机';
-    case 1009:
-      return '视频';
-    default:
-      return '未知';
-  }
-};
-
-const getFrameNumber = (value: any, fallback = 0) => {
-  const numberValue = Number(value);
-  return Number.isFinite(numberValue) ? numberValue : fallback;
-};
-
-const getOptionalNumber = (value: any) => {
-  const numberValue = Number(value);
-  return Number.isFinite(numberValue) ? numberValue : undefined;
-};
-
-const getTextLayerFontNames = (layer: any) => {
-  const fontNames = new Set<string>();
-  const keyframes = layer?.t?.d?.k;
-  if (!Array.isArray(keyframes)) return [];
-
-  keyframes.forEach((keyframe: any) => {
-    const fontName = typeof keyframe?.s?.f === 'string' ? keyframe.s.f.trim() : '';
-    if (fontName) fontNames.add(fontName);
-  });
-
-  return Array.from(fontNames);
-};
-
-const getLayerEffects = (layer: any) => {
-  if (!Array.isArray(layer?.ef)) return [];
-
-  return layer.ef.map((effect: any) => {
-    const name = typeof effect?.nm === 'string' && effect.nm.trim() ? effect.nm.trim() : 'Effect';
-    const matchName =
-      typeof effect?.mn === 'string' && effect.mn.trim() ? effect.mn.trim() : undefined;
-    const normalized = `${name} ${matchName ?? ''}`.toLocaleLowerCase();
-
-    if (normalized.includes('gaussian blur') || normalized.includes('高斯模糊')) {
-      return { kind: 'gaussian-blur' as const, name, matchName };
-    }
-    if (normalized.includes('drop shadow') || normalized.includes('投影')) {
-      return { kind: 'drop-shadow' as const, name, matchName };
-    }
-    return { kind: 'unsupported' as const, name, matchName };
-  });
-};
-
-const copyPlainTextToClipboard = async (text: string) => {
-  if (navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(text);
-    return;
-  }
-
-  const textarea = document.createElement('textarea');
-  textarea.value = text;
-  textarea.setAttribute('readonly', '');
-  textarea.style.position = 'fixed';
-  textarea.style.left = '-9999px';
-  textarea.style.top = '0';
-  document.body.appendChild(textarea);
-  textarea.select();
-  try {
-    if (!document.execCommand('copy')) {
-      throw new Error('execCommand copy returned false');
-    }
-  } finally {
-    document.body.removeChild(textarea);
-  }
-};
-
-const collectLayerRows = (json: any): LayerRow[] => {
-  const rows: LayerRow[] = [];
-  let order = 0;
-
-  const collect = (layers: any[], compositionName: string, basePath: Array<string | number>) => {
-    let previousMatteLayerIndex: number | undefined;
-    layers.forEach((layer, layerIndex) => {
-      const path = [...basePath, layerIndex];
-      const typeCode = getFrameNumber(layer?.ty, 0);
-      const editableKind = getEditableLayerKind(layer);
-      const index = getFrameNumber(layer?.ind, layerIndex + 1);
-      const name = String(layer?.nm || `layer_${index}`);
-      const key = `${compositionName}:${index}`;
-      const parentIndex = layer?.parent !== undefined ? getOptionalNumber(layer.parent) : undefined;
-      const timeStretch = getFrameNumber(layer?.sr, 1);
-      const matteLayerType = layer?.td !== undefined ? getOptionalNumber(layer.td) : undefined;
-      const isMatte = typeof matteLayerType === 'number' && matteLayerType > 0;
-      const matteType = layer?.tt !== undefined ? getOptionalNumber(layer.tt) : undefined;
-      const previousLayer = layerIndex > 0 ? layers[layerIndex - 1] : undefined;
-      const previousLayerIndex =
-        previousLayer?.ind !== undefined ? getOptionalNumber(previousLayer.ind) : undefined;
-      const matteLayerIndex =
-        typeof matteType === 'number' && matteType > 0
-          ? layer?.tp !== undefined
-            ? getOptionalNumber(layer.tp)
-            : (previousMatteLayerIndex ?? previousLayerIndex)
-          : undefined;
-      rows.push({
-        key,
-        name,
-        typeLabel: getLayerTypeLabel(typeCode, layer),
-        typeCode,
-        path,
-        transform: readLayerStaticTransform(layer),
-        transformStaticState: readLayerTransformStaticState(layer),
-        index,
-        order,
-        startFrame: getFrameNumber(layer?.ip),
-        endFrame: getFrameNumber(layer?.op),
-        compositionName,
-        editableKind,
-        refId: typeof layer?.refId === 'string' && layer.refId ? layer.refId : undefined,
-        fontNames: typeCode === 5 ? getTextLayerFontNames(layer) : undefined,
-        timeStretch,
-        effects: getLayerEffects(layer),
-        parentIndex,
-        hidden: Boolean(layer?.hd),
-        isMatte,
-        matteType,
-        matteLayerIndex,
-        is3d: Boolean(layer?.ddd),
-      });
-      if (isMatte) {
-        previousMatteLayerIndex = index;
-      }
-      order += 1;
-    });
-  };
-
-  if (Array.isArray(json?.layers)) {
-    collect(json.layers, '主合成', ['layers']);
-  }
-
-  if (Array.isArray(json?.assets)) {
-    json.assets.forEach((asset: any, assetIndex: number) => {
-      if (!Array.isArray(asset?.layers)) return;
-      const compositionName = String(asset.nm || asset.id || '预合成');
-      collect(asset.layers, compositionName, ['assets', assetIndex, 'layers']);
-    });
-  }
-
-  return rows;
-};
-
 type TextEdit = Pick<TextLayerRow, 'key' | 'name'> & { text: string };
 
 type PendingAlphaZipPrompt = {
@@ -522,13 +461,105 @@ type PendingAlphaZipPrompt = {
   info: AlphaZipBundleInfo;
 };
 
+type UploadSelectionSource = 'picker' | 'drop';
+type UploadSelectionMode = 'file' | 'directory' | 'drop';
+type UploadSelectionKind = 'json' | 'zip' | 'directory' | 'unsupported';
+type UploadActionOptions = {
+  rethrow?: boolean;
+};
+
+export interface RepackOutputOptions {
+  exportLocal: boolean;
+  uploadCdn: boolean;
+}
+
+interface SourceTextLoadStatus {
+  loading: boolean;
+  title: string;
+  detail: string;
+}
+
+interface PendingUploadSelection {
+  files: File[];
+  source: UploadSelectionSource;
+  kind: UploadSelectionKind;
+  title: string;
+  detail: string;
+  description: string;
+  sizeLabel: string;
+  fileCount: number;
+  invalidReason?: string;
+}
+
 type RemoteSourceKind = 'json' | 'zip' | 'unknown';
 
 const INITIAL_JSON_EDITOR_TEXT = '{\n  "v": "5.7.4"\n}\n';
 const JSON_AUTO_REFRESH_DELAY_MS = 800;
+const UPDATE_EVENT_SUBSCRIPTION_LIMIT = 120;
+const WORKER_INSPECTION_TIMEOUT_MS = 15000;
+const RESOURCE_UPLOAD_CONCURRENCY = 4;
+const REMOTE_IMAGE_FORMAT_CONCURRENCY = 4;
+
+type RemoteImageFormatCache = Record<string, ImageResourceFormat | null>;
+
+interface RemoteImageFormatTarget {
+  url: string;
+  fallbackPath: string;
+}
+
+const createIdleSourceTextStatus = (): SourceTextLoadStatus => ({
+  loading: false,
+  title: '',
+  detail: '',
+});
+
+const createEmptyJsonAnalysis = (status: JsonAnalysisStatus, error = ''): JsonAnalysisState => ({
+  status,
+  error,
+  parsedJson: null,
+  composition: null,
+  textLayerRows: [],
+  layerRows: [],
+  elapsedMs: 0,
+});
 
 const getJsonErrorMessage = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
+
+class HandledUploadError extends Error {}
+
+const yieldToBrowser = () =>
+  new Promise<void>((resolve) => {
+    window.requestAnimationFrame(() => {
+      window.setTimeout(resolve, 0);
+    });
+  });
+
+const withTrailingNewline = (text: string) => (text.endsWith('\n') ? text : `${text}\n`);
+
+const createEditorJsonText = (jsonText: string) => withTrailingNewline(jsonText);
+
+const mapWithConcurrency = async <T, R>(
+  items: T[],
+  limit: number,
+  worker: (item: T, index: number) => Promise<R>,
+) => {
+  const results = new Array<R>(items.length);
+  let cursor = 0;
+  const workerCount = Math.max(1, Math.min(limit, items.length));
+
+  await Promise.all(
+    Array.from({ length: workerCount }, async () => {
+      while (cursor < items.length) {
+        const index = cursor;
+        cursor += 1;
+        results[index] = await worker(items[index], index);
+      }
+    }),
+  );
+
+  return results;
+};
 
 const normalizeRelPath = (path: string) =>
   path.replace(/\\/g, '/').split('/').filter(Boolean).join('/');
@@ -568,11 +599,16 @@ const getJsonAssetPath = (dirName: string, fileName: string) => {
   return `${trimmedDir}${trimmedFile}`;
 };
 
-const preparePreviewJsonText = (jsonText: string, baseUrl: string) => {
-  const parsed = JSON.parse(jsonText) as any;
-  if (!baseUrl) {
+const preparePreviewJsonText = (
+  jsonText: string,
+  baseUrl: string,
+  options: { hasRelativeResources?: boolean } = {},
+) => {
+  if (!baseUrl || options.hasRelativeResources === false) {
     return { jsonText, rewrittenResourceCount: 0 };
   }
+
+  const parsed = JSON.parse(jsonText) as any;
 
   let rewrittenResourceCount = 0;
   const resolveResource = (value: string) => {
@@ -630,47 +666,6 @@ const preparePreviewJsonText = (jsonText: string, baseUrl: string) => {
 
 const isDirectoryAsset = (path: string) => /(^|\/)(images|videos|fonts)\//i.test(path);
 const RESOURCE_URL_VALIDATE_TIMEOUT_MS = 12000;
-const LOCAL_RESOURCE_CACHE_NAME = 'animax-previewer-local-resources-v1';
-const LOCAL_RESOURCE_PATH_PREFIX = '__local_resources__';
-
-let localResourceWorkerReadyPromise: Promise<ServiceWorkerRegistration> | null = null;
-
-const collectRelativeResourcePaths = (json: any) => {
-  const paths = new Set<string>();
-  const addPath = (value: string) => {
-    const trimmed = value.trim();
-    if (!trimmed || isRemoteOrInlineResource(trimmed)) return;
-    const normalized = normalizeRelPath(trimmed.replace(/^\/+/, ''));
-    if (!normalized) return;
-    paths.add(normalized);
-  };
-
-  if (Array.isArray(json?.assets)) {
-    json.assets.forEach((asset: any) => {
-      if (!asset || Array.isArray(asset.layers)) return;
-      const p = typeof asset.p === 'string' ? asset.p : '';
-      const u = typeof asset.u === 'string' ? asset.u : '';
-      addPath(`${u}${p}`);
-    });
-  }
-
-  if (Array.isArray(json?.videos)) {
-    json.videos.forEach((video: any) => {
-      const p = typeof video?.p === 'string' ? video.p : '';
-      const u = typeof video?.u === 'string' ? video.u : '';
-      addPath(`${u}${p}`);
-    });
-  }
-
-  if (Array.isArray(json?.fonts?.list)) {
-    json.fonts.list.forEach((font: any) => {
-      const fPath = typeof font?.fPath === 'string' ? font.fPath : '';
-      addPath(fPath);
-    });
-  }
-
-  return paths;
-};
 
 const attachRelativePath = (file: File, relPath: string) => {
   try {
@@ -684,129 +679,137 @@ const attachRelativePath = (file: File, relPath: string) => {
   return file;
 };
 
-const getLocalResourceMimeType = (fileName: string, blob: Blob) => {
-  if (blob.type) return blob.type;
-  if (/\.(lottie\.json|json)$/i.test(fileName)) return 'application/json';
-  if (/\.zip$/i.test(fileName)) return 'application/zip';
-  if (/\.png$/i.test(fileName)) return 'image/png';
-  if (/\.(jpe?g)$/i.test(fileName)) return 'image/jpeg';
-  if (/\.webp$/i.test(fileName)) return 'image/webp';
-  if (/\.gif$/i.test(fileName)) return 'image/gif';
-  if (/\.svg$/i.test(fileName)) return 'image/svg+xml';
-  if (/\.mp4$/i.test(fileName)) return 'video/mp4';
-  if (/\.webm$/i.test(fileName)) return 'video/webm';
-  if (/\.mov$/i.test(fileName)) return 'video/quicktime';
-  if (/\.woff2$/i.test(fileName)) return 'font/woff2';
-  if (/\.woff$/i.test(fileName)) return 'font/woff';
-  if (/\.ttf$/i.test(fileName)) return 'font/ttf';
-  if (/\.otf$/i.test(fileName)) return 'font/otf';
-  return 'application/octet-stream';
+const isDirectorySelection = (files: File[]) =>
+  files.some((file) =>
+    normalizeRelPath(String((file as any).webkitRelativePath || '')).includes('/'),
+  );
+
+const describeUploadSelection = (
+  rawFiles: File[],
+  mode: UploadSelectionMode,
+  source: UploadSelectionSource,
+): PendingUploadSelection => {
+  const files = rawFiles.filter(Boolean);
+  const fileCount = files.length;
+  const totalSize = files.reduce((sum, file) => sum + (Number(file.size) || 0), 0);
+  const sizeLabel = fileCount > 0 ? formatBytes(totalSize) : '--';
+  const firstFileName = files[0]?.name || '未选择文件';
+  const hasDirectoryPath = isDirectorySelection(files);
+  const shouldTreatAsDirectory = mode === 'directory' || hasDirectoryPath || fileCount > 1;
+
+  if (fileCount === 0) {
+    return {
+      files,
+      source,
+      kind: 'unsupported',
+      title: '未选择文件',
+      detail: '请拖入或选择 .json、.zip 或目录',
+      description: '当前没有可加载的文件。',
+      sizeLabel,
+      fileCount,
+      invalidReason: '请选择 .json、.zip 或目录后再确认',
+    };
+  }
+
+  if (shouldTreatAsDirectory) {
+    return {
+      files,
+      source,
+      kind: 'directory',
+      title: hasDirectoryPath
+        ? normalizeRelPath(String((files[0] as any).webkitRelativePath)).split('/')[0] || '目录'
+        : '文件集合',
+      detail: `${fileCount} 个文件 · ${sizeLabel}`,
+      description:
+        '确认后会扫描目录内可解析的主 JSON，并上传 JSON 引用的 images、videos、fonts 资源。',
+      sizeLabel,
+      fileCount,
+    };
+  }
+
+  if (isZipLikePath(firstFileName)) {
+    return {
+      files,
+      source,
+      kind: 'zip',
+      title: firstFileName,
+      detail: `ZIP · ${sizeLabel}`,
+      description: '确认后会解压 ZIP；识别到 Alpha ZIP 时会先提示转换，再加载预览。',
+      sizeLabel,
+      fileCount,
+    };
+  }
+
+  if (isJsonLikePath(firstFileName)) {
+    return {
+      files,
+      source,
+      kind: 'json',
+      title: firstFileName,
+      detail: `JSON · ${sizeLabel}`,
+      description: '确认后会解析 JSON；如果它引用同级本地资源，会提示改用目录或 ZIP 加载。',
+      sizeLabel,
+      fileCount,
+    };
+  }
+
+  return {
+    files,
+    source,
+    kind: 'unsupported',
+    title: firstFileName,
+    detail: `${fileCount} 个文件 · ${sizeLabel}`,
+    description: '当前类型无法加载。',
+    sizeLabel,
+    fileCount,
+    invalidReason: '仅支持 .json、.lottie.json、.zip 或包含 JSON 的目录',
+  };
 };
 
-const getAppBaseUrl = () => new URL(import.meta.env.BASE_URL || '/', window.location.href);
-
-const waitForLocalResourceController = async (registration: ServiceWorkerRegistration) => {
-  if (navigator.serviceWorker.controller) return;
-  registration.active?.postMessage({ type: 'ANIMAX_CLAIM_CLIENTS' });
-
-  await new Promise<void>((resolve) => {
-    let done = false;
-    const finish = () => {
-      if (done) return;
-      done = true;
-      window.clearTimeout(timer);
-      navigator.serviceWorker.removeEventListener('controllerchange', finish);
-      resolve();
-    };
-    const timer = window.setTimeout(finish, 3000);
-    navigator.serviceWorker.addEventListener('controllerchange', finish);
+const readDroppedFile = (entry: FileSystemFileEntry) =>
+  new Promise<File>((resolve, reject) => {
+    entry.file(resolve, reject);
   });
 
-  if (!navigator.serviceWorker.controller) {
-    throw new Error('本地资源服务初始化失败，请刷新页面后重试');
-  }
-};
+const readDroppedDirectoryEntries = (reader: FileSystemDirectoryReader) =>
+  new Promise<FileSystemEntry[]>((resolve, reject) => {
+    reader.readEntries(resolve, reject);
+  });
 
-const registerLocalResourceWorker = async () => {
-  const primaryWorkerUrl = new URL('local-resource-sw.js', getAppBaseUrl());
-  const fallbackWorkerUrl = new URL('/local-resource-sw.js', window.location.href);
-  const workerUrls =
-    primaryWorkerUrl.toString() === fallbackWorkerUrl.toString()
-      ? [primaryWorkerUrl]
-      : [primaryWorkerUrl, fallbackWorkerUrl];
-  let lastError: unknown = null;
-
-  for (const workerUrl of workerUrls) {
-    try {
-      return await navigator.serviceWorker.register(workerUrl.toString(), {
-        updateViaCache: 'none',
-      });
-    } catch (error) {
-      lastError = error;
-    }
+const traverseDroppedEntry = async (entry: FileSystemEntry, parentPath = ''): Promise<File[]> => {
+  const relPath = joinRelPath(parentPath, entry.name);
+  if (entry.isFile) {
+    const file = await readDroppedFile(entry as FileSystemFileEntry);
+    return [attachRelativePath(file, relPath || file.name)];
   }
 
-  throw lastError instanceof Error ? lastError : new Error(String(lastError));
-};
+  if (!entry.isDirectory) return [];
 
-const ensureLocalResourceWorkerReady = async () => {
-  if (!/^https?:$/i.test(window.location.protocol)) {
-    throw new Error('本地资源 http 映射需要通过 http(s) 页面访问');
-  }
-  if (!('serviceWorker' in navigator) || !('caches' in window)) {
-    throw new Error('当前浏览器不支持本地资源 http 映射');
-  }
-
-  if (!localResourceWorkerReadyPromise) {
-    localResourceWorkerReadyPromise = (async () => {
-      await registerLocalResourceWorker();
-      const registration = await navigator.serviceWorker.ready;
-      await waitForLocalResourceController(registration);
-      return registration;
-    })().catch((error) => {
-      localResourceWorkerReadyPromise = null;
-      throw error;
-    });
-  }
-
-  return localResourceWorkerReadyPromise;
-};
-
-const getLocalResourceUrl = (uploadDir: string, fileName: string) => {
-  const safeDir = normalizeRelPath(uploadDir)
-    .split('/')
-    .map((part) => safeSegment(part))
-    .filter(Boolean)
-    .join('/');
-  const safeName = getUploadFileName(fileName || 'resource');
-  return new URL(
-    joinRelPath(LOCAL_RESOURCE_PATH_PREFIX, safeDir, safeName),
-    getAppBaseUrl(),
-  ).toString();
-};
-
-const isLocalResourceUrl = (value: string) => {
-  try {
-    return new URL(value.trim(), window.location.href).pathname.includes(
-      `/${LOCAL_RESOURCE_PATH_PREFIX}/`,
+  const reader = (entry as FileSystemDirectoryEntry).createReader();
+  const files: File[] = [];
+  while (true) {
+    const entries = await readDroppedDirectoryEntries(reader);
+    if (entries.length === 0) break;
+    const nestedFiles = await Promise.all(
+      entries.map((childEntry) => traverseDroppedEntry(childEntry, relPath)),
     );
-  } catch {
-    return false;
+    nestedFiles.forEach((items) => files.push(...items));
   }
+  return files;
 };
 
-const putLocalResource = async (url: string, file: Blob, fileName: string) => {
-  await ensureLocalResourceWorkerReady();
-  const cache = await caches.open(LOCAL_RESOURCE_CACHE_NAME);
-  await cache.put(
-    new Request(url),
-    new Response(file, {
-      headers: {
-        'Cache-Control': 'no-store',
-        'Content-Type': getLocalResourceMimeType(fileName, file),
-      },
-    }),
-  );
+const collectDroppedFiles = async (dataTransfer: DataTransfer) => {
+  const items = Array.from(dataTransfer.items ?? []);
+  const entries = items
+    .map((item) => (item.kind === 'file' ? item.webkitGetAsEntry() : null))
+    .filter((entry): entry is FileSystemEntry => Boolean(entry));
+
+  if (entries.length > 0) {
+    const nestedFiles = await Promise.all(entries.map((entry) => traverseDroppedEntry(entry)));
+    return nestedFiles.flat();
+  }
+
+  return Array.from(dataTransfer.files ?? []).map((file) => attachRelativePath(file, file.name));
 };
 
 export const useAnimaX = () => {
@@ -823,6 +826,8 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const filePickerRef = useRef<HTMLInputElement>(null);
   const uploadFilePickerRef = useRef<HTMLInputElement>(null);
   const replacementPickerRef = useRef<HTMLInputElement>(null);
+  const objectUrlRef = useRef<string | null>(null);
+  const resourceObjectUrlsRef = useRef<Record<string, string>>({});
   const replacementTargetRef = useRef<{ kind: ResourceKind; id: string } | null>(null);
   const pendingResourceReplacementRef = useRef<PendingResourceReplacement | null>(null);
   const currentFrameRef = useRef(0);
@@ -835,6 +840,9 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const lastScrubFrameRef = useRef(0);
   const totalFrameRef = useRef(1);
   const subscribedUpdateFramesRef = useRef<number[]>([]);
+  const frameUiCommitTimerRef = useRef<number | null>(null);
+  const lastFrameUiCommitAtRef = useRef(0);
+  const pendingFrameUiStateRef = useRef<{ current?: number; total?: number }>({});
   const resourceEditsRef = useRef<Record<string, ResourceEdit>>({});
   const fontStyleEditsRef = useRef<Record<string, FontStyleEdit>>({});
   const textEditsRef = useRef<Record<string, TextEdit>>({});
@@ -847,6 +855,8 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const lastRandomLottieUrlRef = useRef<string | null>(null);
   const layerBoundsRequestIdRef = useRef(0);
   const layerBoundsRequestIdsRef = useRef<Record<string, number>>({});
+  const jsonAnalysisWorkerRef = useRef<Worker | null>(null);
+  const jsonAnalysisRequestIdRef = useRef(0);
 
   const randomLottieUrls = useMemo(
     () =>
@@ -877,10 +887,20 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const initialDynamicResourceOn = true;
   const initialActiveTab: AnimaXToolTab = 'layers';
+  const initialSourceTextLoading = isJsonLikePath(initialSrc);
 
   const [srcInput, setSrcInput] = useState(initialSrc);
   const [src, setSrc] = useState(initialSrc);
   const [previewJsonText, setPreviewJsonText] = useState('');
+  const [sourceTextLoadStatus, setSourceTextLoadStatus] = useState<SourceTextLoadStatus>(() =>
+    initialSourceTextLoading
+      ? {
+          loading: true,
+          title: '等待下载远程 JSON',
+          detail: initialSrc.split('/').filter(Boolean).pop()?.split('?')[0] || 'remote.json',
+        }
+      : createIdleSourceTextStatus(),
+  );
   const [isDraggingFile, setIsDraggingFile] = useState(false);
   const [activeTab, setActiveTab] = useState<AnimaXToolTab>(initialActiveTab);
   const [speed, setSpeed] = useState(1.0);
@@ -899,10 +919,18 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     tone: 'idle',
     message: 'JSON 已载入',
   });
+  const [jsonAnalysis, setJsonAnalysis] = useState<JsonAnalysisState>(() =>
+    createEmptyJsonAnalysis('pending'),
+  );
   const [animaxViewKey, setAnimaxViewKey] = useState(0);
   const [dynamicResourceOn, setDynamicResourceOn] = useState(initialDynamicResourceOn);
   const [dynamicResourceCode, setDynamicResourceCode] = useState(initialDynamicResourceCode);
   const [resourceEdits, setResourceEdits] = useState<Record<string, ResourceEdit>>({});
+  const [remoteImageFormats, setRemoteImageFormats] = useState<RemoteImageFormatCache>({});
+  const [resourceCheckResults, setResourceCheckResults] = useState<
+    Record<string, ResourceCheckResult>
+  >({});
+  const [isFixingResources, setIsFixingResources] = useState(false);
   const [fontStyleEdits, setFontStyleEdits] = useState<Record<string, FontStyleEdit>>({});
   const [textDrafts, setTextDrafts] = useState<Record<string, string>>({});
   const [activeLayerBoundsKeys, setActiveLayerBoundsKeys] = useState<string[]>([]);
@@ -915,20 +943,33 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   >({});
   const pendingSelectedLayerKeyRef = useRef('');
   const [isRepacking, setIsRepacking] = useState(false);
+  const [isDownloadingLottie, setIsDownloadingLottie] = useState(false);
   const [isRandomLottieLoading, setIsRandomLottieLoading] = useState(false);
   const [directoryUploadProgress, setDirectoryUploadProgress] =
     useState<DirectoryUploadProgress | null>(null);
   const [runtimeReady, setRuntimeReady] = useState(false);
   const [runtimeStatus, setRuntimeStatus] = useState<AnimaXRuntimeStatus | null>(null);
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
+  const [runtimeInitDetail, setRuntimeInitDetail] = useState('等待运行时初始化开始');
   const [animElement, setAnimElement] = useState<AnimaXViewElement | null>(null);
   const [canvasElement, setCanvasElement] = useState<HTMLDivElement | null>(null);
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
+  const [repackDialogOpen, setRepackDialogOpen] = useState(false);
+  const [packageRecordsOpen, setPackageRecordsOpen] = useState(false);
+  const [packageRecords, setPackageRecords] = useState<AnimaXCdnHistoryItem[]>(() =>
+    readAnimaXCdnHistory(),
+  );
+  const [pendingUploadSelection, setPendingUploadSelection] =
+    useState<PendingUploadSelection | null>(null);
+  const [uploadDialogError, setUploadDialogError] = useState('');
+  const [isUploadDialogConfirming, setIsUploadDialogConfirming] = useState(false);
   const [pendingAlphaZipPrompt, setPendingAlphaZipPrompt] = useState<PendingAlphaZipPrompt | null>(
     null,
   );
 
   const jsonEditorTextRef = useRef(jsonEditorText);
   const jsonBaselineTextRef = useRef(jsonBaselineText);
+  const jsonEditorSourceUrlRef = useRef('');
   const jsonResourceBaseUrlRef = useRef(getJsonResourceBaseUrl(initialSrc));
   const jsonPreviewedTextRef = useRef(INITIAL_JSON_EDITOR_TEXT);
   const jsonAutoRefreshTimerRef = useRef<number | null>(null);
@@ -951,6 +992,38 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   useEffect(() => {
     totalFrameRef.current = totalFrame;
   }, [totalFrame]);
+
+  const commitFrameUiState = (state: { current?: number; total?: number }, immediate = false) => {
+    pendingFrameUiStateRef.current = {
+      ...pendingFrameUiStateRef.current,
+      ...state,
+    };
+
+    const flush = () => {
+      frameUiCommitTimerRef.current = null;
+      lastFrameUiCommitAtRef.current = performance.now();
+      const pending = pendingFrameUiStateRef.current;
+      pendingFrameUiStateRef.current = {};
+      if (Number.isFinite(pending.total)) {
+        setTotalFrame(pending.total as number);
+      }
+      if (Number.isFinite(pending.current)) {
+        setCurrentFrame(pending.current as number);
+      }
+    };
+
+    if (immediate || performance.now() - lastFrameUiCommitAtRef.current >= 66) {
+      if (frameUiCommitTimerRef.current !== null) {
+        window.clearTimeout(frameUiCommitTimerRef.current);
+        frameUiCommitTimerRef.current = null;
+      }
+      flush();
+      return;
+    }
+
+    if (frameUiCommitTimerRef.current !== null) return;
+    frameUiCommitTimerRef.current = window.setTimeout(flush, 66);
+  };
 
   useEffect(() => {
     isPausedRef.current = isPaused;
@@ -975,42 +1048,23 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const canConfirm = useMemo(() => srcInput.trim().length > 0, [srcInput]);
   const canShareSrc = useMemo(() => {
     const shareSrc = src.trim();
-    return (
-      shareSrc.length > 0 &&
-      !/^(blob|data|file):/i.test(shareSrc) &&
-      !isLocalResourceUrl(shareSrc)
-    );
+    return shareSrc.length > 0 && !/^(blob|data|file):/i.test(shareSrc);
   }, [src]);
   const canApplyDynamicResourceCode = useMemo(
     () => dynamicResourceCode.trim().length > 0,
     [dynamicResourceCode],
   );
 
-  const parsedJson = useMemo(() => {
-    try {
-      return JSON.parse(jsonEditorText);
-    } catch {
-      return null;
-    }
-  }, [jsonEditorText]);
-
   const jsonSizeBytes = useMemo(
     () => new TextEncoder().encode(jsonEditorText).length,
     [jsonEditorText],
   );
 
-  const composition = useMemo(() => {
-    if (!parsedJson) return null;
-    try {
-      return LottieParser.Parse(parsedJson);
-    } catch {
-      return null;
-    }
-  }, [parsedJson]);
-
-  const textLayerRows = useMemo<TextLayerRow[]>(() => collectTextLayers(parsedJson), [parsedJson]);
-  const layerRows = useMemo<LayerRow[]>(() => collectLayerRows(parsedJson), [parsedJson]);
-  const canRepack = useMemo(() => Boolean(parsedJson) && !isRepacking, [isRepacking, parsedJson]);
+  const parsedJson = jsonAnalysis.status === 'ready' ? jsonAnalysis.parsedJson : null;
+  const composition = jsonAnalysis.status === 'ready' ? jsonAnalysis.composition : null;
+  const textLayerRows = jsonAnalysis.status === 'ready' ? jsonAnalysis.textLayerRows : [];
+  const layerRows = jsonAnalysis.status === 'ready' ? jsonAnalysis.layerRows : [];
+  const canRepack = jsonAnalysis.status === 'ready' && Boolean(parsedJson) && !isRepacking;
   const isDirectoryUploading = Boolean(
     directoryUploadProgress &&
     directoryUploadProgress.phase !== 'done' &&
@@ -1019,6 +1073,125 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const canRefreshJsonPreview = jsonEditorText.trim().length > 0 && !isDirectoryUploading;
   const canResetJsonEditor = jsonEditorText !== jsonBaselineText;
   const canRandomLottie = randomLottieCount > 0 && !isRandomLottieLoading && !isDirectoryUploading;
+  const previewStageStatus = useMemo<PreviewStageStatus>(() => {
+    if (runtimeError) {
+      return {
+        visible: true,
+        title: '运行时初始化失败',
+        detail: runtimeError,
+      };
+    }
+
+    if (!runtimeStatus || !runtimeStatus.ready) {
+      return {
+        visible: true,
+        title: '正在准备运行时资源',
+        detail: runtimeInitDetail,
+      };
+    }
+
+    if (!isReady) {
+      return {
+        visible: true,
+        title: '正在解析动画并绘制首帧',
+        detail: 'AnimaX 已挂载，复杂 shape/path JSON 首次解析可能需要更久',
+      };
+    }
+
+    return {
+      visible: false,
+      title: '',
+      detail: '',
+    };
+  }, [isReady, runtimeError, runtimeInitDetail, runtimeStatus]);
+
+  const lottieLoadStatus = useMemo<LottieLoadStatus>(() => {
+    if (sourceTextLoadStatus.loading) {
+      return {
+        tone: 'loading',
+        label: 'JSON 同步中',
+        detail: `${sourceTextLoadStatus.title}：${sourceTextLoadStatus.detail}`,
+      };
+    }
+
+    if (runtimeError) {
+      return {
+        tone: 'error',
+        label: '加载异常',
+        detail: runtimeError,
+      };
+    }
+
+    if (runtimeStatus?.fontTimedOut) {
+      return {
+        tone: 'error',
+        label: '字体超时',
+        detail: `字体注册超过 ${Math.round(runtimeStatus.fontTimeoutMs / 1000)}s，请刷新页面重试`,
+      };
+    }
+
+    if (jsonAnalysis.status === 'error') {
+      return {
+        tone: 'error',
+        label: 'JSON 异常',
+        detail: jsonAnalysis.error || 'JSON 解析失败',
+      };
+    }
+
+    if (runtimeStatus?.warnings.length) {
+      return {
+        tone: 'error',
+        label: '加载异常',
+        detail: runtimeStatus.warnings.join('；'),
+      };
+    }
+
+    if (!runtimeStatus || !runtimeStatus.ready) {
+      return {
+        tone: 'loading',
+        label: '运行时加载中',
+        detail: runtimeInitDetail,
+      };
+    }
+
+    if (!isReady) {
+      return {
+        tone: 'loading',
+        label: '播放器加载中',
+        detail: '正在解析动画 JSON 并等待首帧',
+      };
+    }
+
+    if (runtimeStatus.fontLoading) {
+      return {
+        tone: 'loading',
+        label: '字体加载中',
+        detail: '正在等待字体注册完成后展示动画',
+      };
+    }
+
+    if (jsonAnalysis.status === 'pending') {
+      return {
+        tone: 'loading',
+        label: 'JSON 解析中',
+        detail: '右侧图层、资源和文本数据正在异步解析',
+      };
+    }
+
+    return {
+      tone: 'success',
+      label: '加载正常',
+      detail: '运行时和 JSON 解析正常',
+    };
+  }, [
+    isReady,
+    jsonAnalysis.error,
+    jsonAnalysis.status,
+    runtimeError,
+    runtimeInitDetail,
+    runtimeStatus,
+    sourceTextLoadStatus,
+  ]);
 
   const markPlaying = () => {
     suppressPlayingSyncUntilRef.current = 0;
@@ -1209,6 +1382,10 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const clearResourceEdits = () => {
     pendingResourceReplacementRef.current = null;
+    Object.values(resourceObjectUrlsRef.current).forEach((url) => {
+      URL.revokeObjectURL(url);
+    });
+    resourceObjectUrlsRef.current = {};
     commitResourceEdits({});
     commitFontStyleEdits({});
   };
@@ -1250,6 +1427,20 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const getLayerRuntimeName = (row: LayerRow) =>
     layerRuntimeNameOverridesRef.current[row.key] ?? row.name;
+
+  const isSameLayerCollection = (left: Array<string | number>, right: Array<string | number>) => {
+    if (left.length !== right.length) return false;
+    if (left.length === 0) return false;
+    return left.slice(0, -1).every((segment, index) => segment === right[index]);
+  };
+
+  const hasDuplicateLayerName = (row: LayerRow, nextName: string) =>
+    layerRows.some(
+      (candidate) =>
+        candidate.key !== row.key &&
+        candidate.name === nextName &&
+        isSameLayerCollection(candidate.path, row.path),
+    );
 
   const valuesDiffer = (left: number, right: number) => Math.abs(left - right) > 0.0001;
 
@@ -1312,54 +1503,6 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return editedResources.length;
   };
 
-  const applyFontStyleEdit = (
-    element: AnimaXViewElement,
-    edit: FontStyleEdit,
-  ): Promise<boolean> => {
-    const nextStyle = edit.style.trim();
-    if (!nextStyle) return Promise.resolve(false);
-
-    pushLog(`[信息] 开始更新字体 Style：${edit.id} -> ${nextStyle}`);
-    return new Promise<boolean>((resolve) => {
-      let settled = false;
-      const timer = window.setTimeout(() => {
-        if (settled) return;
-        settled = true;
-        pushLog(`[警告] 字体 Style 更新超时：${edit.id}`);
-        resolve(false);
-      }, 1000);
-
-      element.setResourceProperty(
-        AnimaXResourcePropertyType.FontStyle,
-        edit.id,
-        createAnimaXValueParam(nextStyle),
-        (success, errorType) => {
-          if (settled) return;
-          settled = true;
-          window.clearTimeout(timer);
-          if (!success) {
-            pushLog(`[错误] 字体 Style 更新失败：${edit.id}，errorType=${errorType}`);
-          } else {
-            pushLog(`[信息] 字体 Style 已更新：${edit.id} -> ${nextStyle}`);
-          }
-          resolve(Boolean(success));
-        },
-      );
-    });
-  };
-
-  const applyEditedFontStyles = async (element: AnimaXViewElement) => {
-    const editedFontStyles = Object.values(fontStyleEditsRef.current).filter(
-      (edit) => edit.id && edit.style,
-    );
-    if (editedFontStyles.length === 0) return 0;
-
-    const results = await Promise.all(
-      editedFontStyles.map((edit) => applyFontStyleEdit(element, edit)),
-    );
-    return results.filter(Boolean).length;
-  };
-
   const applyEditedTexts = async (element: AnimaXViewElement) => {
     const editedTexts = Object.values(textEditsRef.current).filter(
       (edit) => edit.name && typeof edit.text === 'string',
@@ -1396,21 +1539,23 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const applyEditedLayerTransforms = async (element: AnimaXViewElement) => {
     const editedTransforms = Object.values(layerTransformEditsRef.current).filter(
-      (edit) => edit.layerName && edit.transform,
+      (edit) =>
+        edit.layerName &&
+        edit.transform &&
+        ((edit.propertyGroups?.length ?? 0) > 0 || edit.visible !== undefined),
     );
     if (editedTransforms.length === 0) return 0;
 
     const results = await Promise.all(
       editedTransforms.map(async (edit) => {
-        const appliedTransform = await applyLayerTransformToElement(
-          element,
-          edit.layerName,
-          edit.transform,
-          {
-            silent: true,
-            waitForCallback: true,
-          },
-        );
+        const shouldApplyTransform = (edit.propertyGroups?.length ?? 0) > 0;
+        const appliedTransform = shouldApplyTransform
+          ? await applyLayerTransformToElement(element, edit.layerName, edit.transform, {
+              silent: true,
+              waitForCallback: true,
+              propertyGroups: edit.propertyGroups,
+            })
+          : true;
         if (edit.visible === undefined) return appliedTransform;
         const appliedVisibility = await applyLayerVisibilityToElement(
           element,
@@ -1426,6 +1571,88 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     );
     return results.filter(Boolean).length;
   };
+
+  const remoteImageFormatTargets = useMemo<RemoteImageFormatTarget[]>(() => {
+    if (!composition) return [];
+
+    const rawImageAssets = new Map<string, any>();
+    if (Array.isArray(parsedJson?.assets)) {
+      parsedJson.assets.forEach((asset: any) => {
+        if (asset?.id && asset?.p) rawImageAssets.set(asset.id, asset);
+      });
+    }
+
+    const targets = new Map<string, RemoteImageFormatTarget>();
+    Object.entries(composition.images).forEach(([id, asset]) => {
+      const edit = resourceEdits[createResourceKey('image', id)];
+      const rawAsset = rawImageAssets.get(id);
+      const sourceForFormat = edit?.url || rawAsset?.p || '';
+      const previewUrl = resolveResourceUrl(src, asset.dirName, asset.fileName, edit);
+      if (!previewUrl || !/^https?:\/\//i.test(previewUrl) || /^data:/i.test(sourceForFormat)) {
+        return;
+      }
+
+      targets.set(previewUrl, {
+        url: previewUrl,
+        fallbackPath: asset.fileName,
+      });
+    });
+
+    return [...targets.values()];
+  }, [composition, parsedJson, resourceEdits, src]);
+
+  useEffect(() => {
+    const pendingTargets = remoteImageFormatTargets.filter(
+      (target) => !(target.url in remoteImageFormats),
+    );
+    if (pendingTargets.length === 0) return undefined;
+
+    const abortController = new AbortController();
+    let cancelled = false;
+
+    const loadRemoteFormats = async () => {
+      const entries = await mapWithConcurrency(
+        pendingTargets,
+        REMOTE_IMAGE_FORMAT_CONCURRENCY,
+        async (target) => {
+          try {
+            const response = await fetch(target.url, { signal: abortController.signal });
+            if (!response.ok) return [target.url, null] as const;
+
+            const contentType = response.headers.get('content-type');
+            const bytes = new Uint8Array(await response.arrayBuffer());
+            return [
+              target.url,
+              getImageResourceFormatFromBytes(bytes, 'URL', target.fallbackPath, contentType) ??
+                null,
+            ] as const;
+          } catch {
+            return [target.url, null] as const;
+          }
+        },
+      );
+
+      if (cancelled) return;
+
+      setRemoteImageFormats((current) => {
+        let changed = false;
+        const next = { ...current };
+        entries.forEach(([url, format]) => {
+          if (url in next) return;
+          next[url] = format;
+          changed = true;
+        });
+        return changed ? next : current;
+      });
+    };
+
+    void loadRemoteFormats();
+
+    return () => {
+      cancelled = true;
+      abortController.abort();
+    };
+  }, [remoteImageFormatTargets, remoteImageFormats]);
 
   const assetRows = useMemo<AssetRow[]>(() => {
     if (!composition) return [];
@@ -1462,31 +1689,47 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const rows: AssetRow[] = [];
 
     Object.entries(composition.images).forEach(([id, asset]) => {
-      const edit = resourceEdits[createResourceKey('image', id)];
+      const resourceKey = createResourceKey('image', id);
+      const edit = resourceEdits[resourceKey];
       const previewUrl = resolveResourceUrl(src, asset.dirName, asset.fileName, edit);
       const refCount = refCounts[id] || 0;
       const rawAsset = rawImageAssets.get(id);
       const sizeBytes = getResourceSize(edit, rawAsset, asset.fileName);
       const sizeLabel = formatKilobytes(sizeBytes);
+      const resourcePath = `${asset.dirName || ''}${asset.fileName || ''}`;
+      const sourceForFormat = edit?.url || rawAsset?.p || previewUrl;
+      const localImageFormat = getImageResourceFormat(sourceForFormat, asset.fileName);
+      const remoteImageFormat =
+        previewUrl && !/^data:/i.test(sourceForFormat) ? remoteImageFormats[previewUrl] : undefined;
+      const imageFormat = remoteImageFormat || localImageFormat;
+      const checkTargetName = edit?.fileName || resourcePath || previewUrl || id;
+      const check =
+        resourceCheckResults[resourceKey] ?? getImageResourceCheck(resourcePath, checkTargetName);
       rows.push({
         kind: 'image',
         id,
         name: id,
+        resourcePath,
         detail: `${asset.width}x${asset.height} / ${formatResourceSourceLabel(previewUrl)}`,
         sizeBytes,
         sizeLabel: sizeLabel || undefined,
+        formatTags: imageFormat?.tags,
+        formatTitle: imageFormat?.title,
         refCount,
         status: edit ? 'mapped' : previewUrl ? (refCount > 0 ? 'ok' : 'unused') : 'missing',
         previewUrl,
+        check,
       });
     });
 
     Object.entries(composition.videos).forEach(([id, asset]) => {
-      const edit = resourceEdits[createResourceKey('video', id)];
+      const resourceKey = createResourceKey('video', id);
+      const edit = resourceEdits[resourceKey];
       const previewUrl = resolveResourceUrl(src, asset.dirName, asset.fileName, edit);
       const refCount = refCounts[id] || 0;
       const sizeBytes = getResourceSize(edit, rawVideoAssets.get(id), asset.fileName) ?? asset.size;
       const sizeLabel = formatKilobytes(sizeBytes);
+      const check = resourceCheckResults[resourceKey];
       rows.push({
         kind: 'video',
         id,
@@ -1499,6 +1742,7 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         refCount,
         status: edit ? 'mapped' : previewUrl ? (refCount > 0 ? 'ok' : 'unused') : 'missing',
         previewUrl,
+        check,
       });
     });
 
@@ -1529,11 +1773,183 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     });
 
     return rows;
-  }, [composition, fontStyleEdits, parsedJson, resourceEdits, src]);
+  }, [
+    composition,
+    fontStyleEdits,
+    parsedJson,
+    remoteImageFormats,
+    resourceCheckResults,
+    resourceEdits,
+    src,
+  ]);
+
+  const resourceWarningCount = useMemo(
+    () =>
+      assetRows.reduce(
+        (count, row) => count + (row.check?.status === 'warning' ? row.check.issues.length : 0),
+        0,
+      ),
+    [assetRows],
+  );
+
+  const videoResourceCheckSignature = useMemo(
+    () => getVideoResourceCheckSignature(assetRows),
+    [assetRows],
+  );
 
   const pushLog = (line: string) => {
     console.log('[animax]', line);
   };
+
+  const inspectJsonTextForUpload = (jsonText: string) =>
+    new Promise<LottieJsonInspection>((resolve, reject) => {
+      const runFallback = () => {
+        window.setTimeout(() => {
+          try {
+            resolve(inspectLottieJsonText(jsonText));
+          } catch (error) {
+            reject(error);
+          }
+        }, 0);
+      };
+
+      if (typeof Worker === 'undefined') {
+        runFallback();
+        return;
+      }
+
+      let worker: Worker | null = null;
+      let settled = false;
+      const requestId = Date.now();
+
+      const finish = (callback: () => void) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timer);
+        worker?.terminate();
+        worker = null;
+        callback();
+      };
+
+      const timer = window.setTimeout(() => {
+        finish(() => {
+          pushLog('[警告] JSON 校验 Worker 超时，回退到延迟主线程解析');
+          runFallback();
+        });
+      }, WORKER_INSPECTION_TIMEOUT_MS);
+
+      try {
+        worker = new Worker(new URL('../services/lottieAnalysis.worker.ts', import.meta.url), {
+          type: 'module',
+        });
+        worker.onmessage = (event: MessageEvent<LottieAnalysisWorkerResponse>) => {
+          const response = event.data;
+          if (response.requestId !== requestId || response.mode !== 'inspect') return;
+          if (response.ok) {
+            finish(() => resolve(response.result));
+          } else {
+            finish(() => reject(new Error(response.error)));
+          }
+        };
+        worker.onerror = (event) => {
+          finish(() => reject(new Error(event.message || 'JSON 校验 Worker 异常')));
+        };
+        worker.postMessage({ requestId, mode: 'inspect', jsonText });
+      } catch (error) {
+        if (worker) {
+          worker.terminate();
+          worker = null;
+        }
+        window.clearTimeout(timer);
+        pushLog(
+          `[警告] JSON 校验 Worker 创建失败，回退到延迟主线程解析：${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+        runFallback();
+      }
+    });
+
+  useEffect(() => {
+    const jsonText = jsonEditorText;
+    const requestId = jsonAnalysisRequestIdRef.current + 1;
+    jsonAnalysisRequestIdRef.current = requestId;
+
+    if (!jsonText.trim()) {
+      setJsonAnalysis(createEmptyJsonAnalysis('error', 'JSON 内容为空'));
+      return undefined;
+    }
+
+    const finishAnalysis = (result: LottieAnalysisResult) => {
+      if (jsonAnalysisRequestIdRef.current !== requestId) return;
+      setJsonAnalysis({
+        ...result,
+        status: 'ready',
+        error: '',
+      });
+      if (result.elapsedMs > 120) {
+        pushLog(
+          `[信息] 右侧 JSON 解析完成：${result.layerRows.length} 个图层，${result.textLayerRows.length} 个文本，${Math.round(
+            result.elapsedMs,
+          )}ms`,
+        );
+      }
+    };
+
+    const failAnalysis = (message: string) => {
+      if (jsonAnalysisRequestIdRef.current !== requestId) return;
+      setJsonAnalysis(createEmptyJsonAnalysis('error', message));
+    };
+
+    setJsonAnalysis(createEmptyJsonAnalysis('pending'));
+
+    try {
+      if (typeof Worker !== 'undefined') {
+        if (!jsonAnalysisWorkerRef.current) {
+          jsonAnalysisWorkerRef.current = new Worker(
+            new URL('../services/lottieAnalysis.worker.ts', import.meta.url),
+            { type: 'module' },
+          );
+        }
+        const worker = jsonAnalysisWorkerRef.current;
+        worker.onmessage = (event: MessageEvent<LottieAnalysisWorkerResponse>) => {
+          const response = event.data;
+          if (response.requestId !== requestId || response.mode !== 'analyze') return;
+          if (response.ok) {
+            finishAnalysis(response.result);
+          } else {
+            failAnalysis(response.error);
+          }
+        };
+        worker.onerror = (event) => {
+          const message = event.message || 'JSON 解析 Worker 异常';
+          failAnalysis(message);
+          worker.terminate();
+          if (jsonAnalysisWorkerRef.current === worker) {
+            jsonAnalysisWorkerRef.current = null;
+          }
+        };
+        worker.postMessage({ requestId, mode: 'analyze', jsonText });
+        return undefined;
+      }
+    } catch (error) {
+      pushLog(
+        `[警告] JSON 解析 Worker 创建失败，回退到延迟主线程解析：${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+
+    const timer = window.setTimeout(() => {
+      try {
+        finishAnalysis(analyzeLottieJsonText(jsonText));
+      } catch (error) {
+        failAnalysis(error instanceof Error ? error.message : String(error));
+      }
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, [jsonEditorText]);
 
   const removeLayerBoundsHighlight = (layerKey: string) => {
     delete layerBoundsRequestIdsRef.current[layerKey];
@@ -1860,7 +2276,9 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       doneTitle: 'Transform JSON 已上传',
       doneDetail: '已重新加载播放器实例',
     });
-    commitLayerTransformEdit({ key: row.key, layerName: row.name, transform });
+    if (propertyGroups.length > 0) {
+      commitLayerTransformEdit({ key: row.key, layerName: row.name, transform, propertyGroups });
+    }
     toast.success(`Transform 已应用：${row.name}`);
     pushLog(`[信息] Transform 已应用：${row.name}${appliedRuntime ? '' : '（仅写入 JSON）'}`);
     pushLog(`[信息] Transform 修改已上传并重新加载：${row.name} -> ${nextUrl}`);
@@ -1871,6 +2289,10 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const cleanName = nextName.trim();
     if (!cleanName) {
       toast.error('图层名不能为空');
+      return;
+    }
+    if (cleanName !== row.name && hasDuplicateLayerName(row, cleanName)) {
+      toast.error('同一合成内已有同名图层');
       return;
     }
 
@@ -1961,6 +2383,10 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       toast.error('图层名不能为空');
       return false;
     }
+    if (cleanName !== row.name && hasDuplicateLayerName(row, cleanName)) {
+      toast.error('同一合成内已有同名图层');
+      return false;
+    }
 
     let nextJson = jsonEditorTextRef.current;
     const visibilityChanged = visible !== !row.hidden;
@@ -2008,7 +2434,16 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       doneTitle: '图层 JSON 已上传',
       doneDetail: '已重新加载播放器实例',
     });
-    commitLayerTransformEdit({ key: row.key, layerName: cleanName, transform, visible });
+    const shouldReplayLayerEdit = propertyGroups.length > 0 || visibilityChanged;
+    if (shouldReplayLayerEdit) {
+      commitLayerTransformEdit({
+        key: row.key,
+        layerName: cleanName,
+        transform,
+        propertyGroups,
+        visible: visibilityChanged ? visible : undefined,
+      });
+    }
     toast.success(`图层修改已应用：${cleanName}`);
     pushLog(
       `[信息] 图层修改已应用：${row.name} -> ${cleanName}${
@@ -2016,7 +2451,9 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }`,
     );
     pushLog(`[信息] 图层修改已上传并重新加载：${cleanName} -> ${nextUrl}`);
-    pushLog(`[信息] 已记录图层属性 API 调用：${cleanName}`);
+    if (shouldReplayLayerEdit) {
+      pushLog(`[信息] 已记录图层属性 API 调用：${cleanName}`);
+    }
     return true;
   };
 
@@ -2118,7 +2555,20 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       window.clearTimeout(directoryUploadClearTimerRef.current);
       directoryUploadClearTimerRef.current = null;
     }
-    setDirectoryUploadProgress(progress);
+    setDirectoryUploadProgress((previous) => {
+      if (!progress) return null;
+      const shouldTrackElapsed = progress.phase === 'uploading' || progress.phase === 'json';
+      if (!shouldTrackElapsed) return progress;
+      return {
+        ...progress,
+        startedAt:
+          progress.startedAt ??
+          (previous?.phase === 'uploading' || previous?.phase === 'json'
+            ? previous.startedAt
+            : undefined) ??
+          performance.now(),
+      };
+    });
   };
 
   const finishDirectoryProgress = (progress: DirectoryUploadProgress) => {
@@ -2133,6 +2583,97 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       },
       progress.phase === 'done' ? 1200 : 2400,
     );
+  };
+
+  const handleOpenUploadDialog = () => {
+    if (isDirectoryUploading) return;
+    setPendingUploadSelection(null);
+    setUploadDialogError('');
+    setUploadDialogOpen(true);
+  };
+
+  const handleCloseUploadDialog = () => {
+    if (isUploadDialogConfirming) return;
+    setUploadDialogOpen(false);
+    setPendingUploadSelection(null);
+    setUploadDialogError('');
+  };
+
+  const handleOpenRepackDialog = () => {
+    if (isRepacking || isDirectoryUploading || !canRepack) return;
+    setRepackDialogOpen(true);
+  };
+
+  const handleCloseRepackDialog = () => {
+    if (isRepacking) return;
+    setRepackDialogOpen(false);
+  };
+
+  const cloudSession = useRef<Promise<void> | null>(null);
+  const ensureCloudSession = () => {
+    if (!cloudSession.current) {
+      cloudSession.current = fetch('/api/session').then(async response => {
+        if (!response.ok) throw new Error('云端上传仅在 Cloudflare 部署中可用');
+        const result = await response.json();
+        if (!result.ready) throw new Error('云端存储尚未配置');
+      }).catch(error => { cloudSession.current = null; throw error; });
+    }
+    return cloudSession.current;
+  };
+
+  const handleOpenPackageRecords = async () => {
+    setPackageRecordsOpen(true);
+    try {
+      await ensureCloudSession();
+      const response = await fetch('/api/files');
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || '读取记录失败');
+      setPackageRecords(result.files);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '读取云端记录失败');
+    }
+  };
+
+  const handleClosePackageRecords = () => {
+    setPackageRecordsOpen(false);
+  };
+
+  const handleResetUploadSelection = () => {
+    if (isUploadDialogConfirming) return;
+    setPendingUploadSelection(null);
+    setUploadDialogError('');
+  };
+
+  const setUploadSelection = (
+    files: File[],
+    mode: UploadSelectionMode,
+    source: UploadSelectionSource,
+  ) => {
+    const selection = describeUploadSelection(files, mode, source);
+    setPendingUploadSelection(selection);
+    setUploadDialogError(selection.invalidReason ?? '');
+    setUploadDialogOpen(true);
+  };
+
+  const handleSelectUploadFiles = (files: File[], source: UploadSelectionSource = 'picker') => {
+    setUploadSelection(files, source === 'drop' ? 'drop' : 'file', source);
+  };
+
+  const handleSelectUploadDirectory = (files: File[], source: UploadSelectionSource = 'picker') => {
+    setUploadSelection(files, 'directory', source);
+  };
+
+  const handleUploadDrop = async (dataTransfer: DataTransfer) => {
+    try {
+      const files = await collectDroppedFiles(dataTransfer);
+      handleSelectUploadFiles(files, 'drop');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setUploadDialogError(`读取拖拽内容失败：${message}`);
+      setPendingUploadSelection(null);
+      setUploadDialogOpen(true);
+      pushLog(`[错误] 读取拖拽内容失败：${message}`);
+    }
   };
 
   const requestAlphaZipConversion = (fileName: string, info: AlphaZipBundleInfo) =>
@@ -2282,21 +2823,6 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return message;
   };
 
-  const applyJsonText = (text: string) => {
-    try {
-      const formatted = `${JSON.stringify(JSON.parse(text), null, 2)}\n`;
-      commitJsonEditorText(formatted);
-      return { parsed: JSON.parse(text) as any, formatted };
-    } catch (error) {
-      setJsonEditorTextState(text);
-      setJsonPreviewStatus({
-        tone: 'error',
-        message: `JSON 语法错误：${getJsonErrorMessage(error)}`,
-      });
-      throw new Error('JSON 内容无法解析，请确认链接返回的是合法 Lottie JSON');
-    }
-  };
-
   const fetchRemoteFile = async (url: string) => {
     const response = await fetch(url);
     if (!response.ok) {
@@ -2349,14 +2875,15 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       });
       const converted = await convertAlphaZipToAnimaxLottie(zipFile);
       if (!converted) {
+        const detail = '未识别到可转换的 Alpha ZIP 配置';
         finishDirectoryProgress({
           phase: 'error',
           title: '转换失败',
-          detail: '未识别到可转换的 Alpha ZIP 配置',
+          detail,
           completed: 0,
           total: 1,
         });
-        return;
+        throw new Error(detail);
       }
 
       const convertedFiles = converted.files.map(({ file, relPath }) =>
@@ -2380,14 +2907,15 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
 
     if (zipFiles.length === 0) {
+      const detail = '压缩包内没有文件';
       finishDirectoryProgress({
         phase: 'error',
         title: 'ZIP 解压失败',
-        detail: '压缩包内没有文件',
+        detail,
         completed: 0,
         total: 1,
       });
-      return;
+      throw new Error(detail);
     }
 
     pushLog(`[信息] ZIP 已解压：${zipFile.name}，${zipFiles.length} 个文件`);
@@ -2406,6 +2934,10 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       ? pendingResourceReplacementRef.current
       : null;
 
+    if (objectUrlRef.current && objectUrlRef.current !== normalizedSrc) {
+      URL.revokeObjectURL(objectUrlRef.current);
+      objectUrlRef.current = null;
+    }
     clearResourceEdits();
     clearLayerBoundsHighlight();
     if (pendingResourceReplacement) {
@@ -2415,6 +2947,15 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     clearLayerTransformEdits();
     setTextDrafts({});
     setPreviewJsonText('');
+    setSourceTextLoadStatus(
+      isJsonLikePath(normalizedSrc)
+        ? {
+            loading: true,
+            title: '正在读取 JSON 文本',
+            detail: getUrlFileName(normalizedSrc, 'remote.json'),
+          }
+        : createIdleSourceTextStatus(),
+    );
     currentFrameRef.current = 0;
     setCurrentFrame(0);
     setTotalFrame(1);
@@ -2540,42 +3081,28 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, [isDirectoryUploading, jsonEditorText]);
 
   const loadRemoteJsonSource = async (url: string) => {
-    setDirectoryProgress({
-      phase: 'scanning',
-      title: '正在下载 JSON',
-      detail: url,
-      completed: 0,
-      total: 1,
-    });
     const { text, contentType, fileName } = await fetchRemoteText(url);
     const kind = inferRemoteSourceKind(url, fileName, contentType);
     if (kind === 'zip') {
       throw new Error('该链接返回的是 ZIP 文件，请使用 ZIP 流程加载');
     }
-    const { parsed } = applyJsonText(text);
-    const relativeResourcePaths = collectRelativeResourcePaths(parsed);
+    await yieldToBrowser();
+    const inspection = await inspectJsonTextForUpload(text);
+    if (!inspection.previewable) {
+      throw new Error('不是可预览的 Lottie/Animax JSON');
+    }
+    const editorJsonText = createEditorJsonText(text);
     pushLog(
       `[信息] 已下载远程 JSON：${fileName}${
-        relativeResourcePaths.size > 0
-          ? `，检测到 ${relativeResourcePaths.size} 个相对资源路径，将按 JSON 同级目录解析`
+        inspection.relativeResourcePaths.length > 0
+          ? `，检测到 ${inspection.relativeResourcePaths.length} 个相对资源路径，将按 JSON 同级目录解析`
           : ''
       }`,
     );
-    setDirectoryProgress({
-      phase: 'loading',
-      title: '正在加载动画',
-      detail: fileName,
-      completed: 1,
-      total: 1,
-    });
+    commitJsonEditorText(editorJsonText, true);
+    jsonEditorSourceUrlRef.current = url;
+    await yieldToBrowser();
     loadAnimationSource(url, true);
-    finishDirectoryProgress({
-      phase: 'done',
-      title: '远程 JSON 已加载',
-      detail: fileName,
-      completed: 1,
-      total: 1,
-    });
   };
 
   const handleRemoteSource = async (rawUrl: string) => {
@@ -2599,13 +3126,6 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       return;
     }
 
-    setDirectoryProgress({
-      phase: 'scanning',
-      title: '正在探测远程资源',
-      detail: url,
-      completed: 0,
-      total: 1,
-    });
     const response = await fetch(url);
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
@@ -2624,30 +3144,23 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
     if (inferredKind === 'json') {
       const text = await response.text();
-      const { parsed } = applyJsonText(text);
-      const relativeResourcePaths = collectRelativeResourcePaths(parsed);
+      await yieldToBrowser();
+      const inspection = await inspectJsonTextForUpload(text);
+      if (!inspection.previewable) {
+        throw new Error('不是可预览的 Lottie/Animax JSON');
+      }
+      const editorJsonText = createEditorJsonText(text);
       pushLog(
         `[信息] 已探测远程 JSON：${fileName}${
-          relativeResourcePaths.size > 0
-            ? `，检测到 ${relativeResourcePaths.size} 个相对资源路径，将按 JSON 同级目录解析`
+          inspection.relativeResourcePaths.length > 0
+            ? `，检测到 ${inspection.relativeResourcePaths.length} 个相对资源路径，将按 JSON 同级目录解析`
             : ''
         }`,
       );
-      setDirectoryProgress({
-        phase: 'loading',
-        title: '正在加载动画',
-        detail: fileName,
-        completed: 1,
-        total: 1,
-      });
+      commitJsonEditorText(editorJsonText, true);
+      jsonEditorSourceUrlRef.current = url;
+      await yieldToBrowser();
       loadAnimationSource(url, true);
-      finishDirectoryProgress({
-        phase: 'done',
-        title: '远程 JSON 已加载',
-        detail: fileName,
-        completed: 1,
-        total: 1,
-      });
       return;
     }
 
@@ -2671,6 +3184,52 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
               : '远程资源加载失败';
         const detail = getRemoteLoadErrorDetail(kind, message);
         pushLog(`[错误] ${title}：${detail}`);
+        toast.error(detail);
+        if (kind === 'zip') {
+          finishDirectoryProgress({
+            phase: 'error',
+            title,
+            detail,
+            completed: 0,
+            total: 1,
+          });
+        } else {
+          setJsonPreviewStatus({
+            tone: 'error',
+            message: `${title}：${detail}`,
+          });
+        }
+      }
+      return;
+    }
+    loadAnimationSource(nextSrc, true);
+  };
+
+  const handleLoadPackageRecord = async (url: string) => {
+    const nextSrc = url.trim();
+    if (!nextSrc) return;
+    setSrcInput(nextSrc);
+    try {
+      if (isRemoteOrInlineResource(nextSrc) && /^https?:/i.test(nextSrc)) {
+        await handleRemoteSource(nextSrc);
+      } else {
+        loadAnimationSource(nextSrc, true);
+      }
+      setPackageRecordsOpen(false);
+      toast.success('已加载打包记录');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      const kind = inferRemoteSourceKind(nextSrc);
+      const title =
+        kind === 'zip'
+          ? '打包记录 ZIP 加载失败'
+          : kind === 'json'
+            ? '打包记录 JSON 加载失败'
+            : '打包记录加载失败';
+      const detail = getRemoteLoadErrorDetail(kind, message);
+      pushLog(`[错误] ${title}：${detail}`);
+      toast.error(detail);
+      if (kind === 'zip') {
         finishDirectoryProgress({
           phase: 'error',
           title,
@@ -2678,42 +3237,84 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           completed: 0,
           total: 1,
         });
+      } else {
+        setJsonPreviewStatus({
+          tone: 'error',
+          message: `${title}：${detail}`,
+        });
       }
-      return;
     }
-    loadAnimationSource(nextSrc, true);
   };
 
-  const handleCopyShareLink = async () => {
+  const handleCopyPackageRecordShareLink = async (url: string) => {
+    try {
+      const shareUrl = createAnimaXShareUrl(url);
+      await copyPlainTextToClipboard(shareUrl);
+      toast.success('分享链接已复制');
+      pushLog(`[信息] 打包记录分享链接已复制：${shareUrl}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      toast.error('复制分享链接失败');
+      pushLog(`[警告] 打包记录分享链接复制失败：${message}`);
+    }
+  };
+
+  const handleRemovePackageRecord = async (url: string) => {
+    try {
+      const id = new URL(url).pathname.split('/')[3];
+      await ensureCloudSession();
+      const response = await fetch(`/api/files/${id}/hide`, { method: 'POST' });
+      if (!response.ok) throw new Error('移除记录失败');
+      setPackageRecords(records => records.filter(item => item.url !== url));
+      removeAnimaXCdnHistoryUrl(url);
+      toast.success('记录已隐藏，已有分享链接仍然有效');
+    } catch (error) { toast.error(error instanceof Error ? error.message : '移除记录失败'); }
+  };
+
+  const getShareableSrc = () => {
     const shareSrc = src.trim();
     if (!shareSrc) {
       toast.error('当前没有可分享的动画链接');
       pushLog('[警告] 当前没有可分享的动画链接');
-      return;
+      return '';
     }
     if (/^(blob|data|file):/i.test(shareSrc)) {
       toast.error('当前资源不是可分享链接');
       pushLog('[警告] 当前资源不是可分享链接');
-      return;
+      return '';
     }
-    if (isLocalResourceUrl(shareSrc)) {
-      toast.error('本地上传资源仅当前浏览器可用');
-      pushLog('[警告] 本地上传资源仅当前浏览器缓存可用，不能复制分享链接');
-      return;
-    }
+    return shareSrc;
+  };
+
+  const handleCopyShareLink = async () => {
+    const shareSrc = getShareableSrc();
+    if (!shareSrc) return;
 
     try {
-      const shareUrl = new URL(window.location.href);
-      shareUrl.search = '';
-      shareUrl.hash = '';
-      shareUrl.searchParams.set('src', shareSrc);
-      await copyPlainTextToClipboard(shareUrl.toString());
+      const share = createAnimaXShareText(shareSrc, 'preview');
+      await copyPlainTextToClipboard(share.text);
       toast.success('分享链接已复制');
-      pushLog(`[信息] 分享链接已复制：${shareUrl.toString()}`);
+      pushLog(`[信息] 分享链接已复制：${share.url}`);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       toast.error('复制分享链接失败');
       pushLog(`[警告] 复制分享链接失败：${message}`);
+    }
+  };
+
+  const handleCopyCardShareLink = async () => {
+    const shareSrc = getShareableSrc();
+    if (!shareSrc) return;
+
+    try {
+      const share = createAnimaXShareText(shareSrc, 'card');
+      await copyPlainTextToClipboard(share.text);
+      toast.success('飞书卡片链接已复制');
+      pushLog(`[信息] 飞书卡片链接已复制：${share.url}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      toast.error('复制飞书卡片链接失败');
+      pushLog(`[警告] 复制飞书卡片链接失败：${message}`);
     }
   };
 
@@ -2751,38 +3352,122 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       const kind = inferRemoteSourceKind(nextUrl);
       const detail = getRemoteLoadErrorDetail(kind, message);
       pushLog(`[错误] 随机 Lottie 加载失败：${detail}`);
-      finishDirectoryProgress({
-        phase: 'error',
-        title: '随机 Lottie 加载失败',
-        detail,
-        completed: 0,
-        total: 1,
-      });
+      if (kind === 'zip') {
+        finishDirectoryProgress({
+          phase: 'error',
+          title: '随机 Lottie 加载失败',
+          detail,
+          completed: 0,
+          total: 1,
+        });
+      }
       toast.error('随机 Lottie 加载失败');
     } finally {
       setIsRandomLottieLoading(false);
     }
   };
 
-  const handleRepack = async () => {
+  const handleRepack = async (
+    options: RepackOutputOptions = { exportLocal: true, uploadCdn: false },
+  ) => {
     if (isRepacking) return;
+    if (!options.exportLocal && !options.uploadCdn) {
+      toast.error('请至少选择一种产物输出方式');
+      return;
+    }
 
     setIsRepacking(true);
-    pushLog('[信息] 重打包开始');
+    let localExportDone = false;
+    let cdnUploadStarted = false;
+    pushLog(
+      `[信息] 重打包开始：${
+        [options.exportLocal ? '本地导出产物' : '', options.uploadCdn ? '上传 CDN' : '']
+          .filter(Boolean)
+          .join('、') || '未选择输出'
+      }`,
+    );
     try {
       const result = await createAnimaXRepack({
         jsonText: jsonEditorText,
         sourceUrl: src,
+        resourceEdits: resourceEditsRef.current,
       });
-      downloadBlob(result.blob, result.fileName);
+      if (options.exportLocal) {
+        downloadBlob(result.blob, result.fileName);
+        localExportDone = true;
+      }
       pushLog(
         `[信息] 重打包完成：${result.fileName}，json=${result.jsonFileName}，图片=${result.downloadedImages}，视频=${result.downloadedVideos}，base64 图片=${result.skippedBase64Images}，base64 视频=${result.skippedBase64Videos}，字体=${result.downloadedFonts}`,
       );
       result.warnings.forEach((warning) => pushLog(`[警告] ${warning}`));
+
+      if (options.uploadCdn) {
+        cdnUploadStarted = true;
+        const nextJsonUrl = await uploadRepackedAnimation(result);
+        if (!nextJsonUrl) throw new Error('重打包后的 JSON 上传失败');
+
+        setPackageRecords(addAnimaXCdnHistoryUrl(nextJsonUrl, { fileName: result.jsonFileName }));
+        pushLog(`[信息] 重打包 CDN 链接已写入历史记录：${nextJsonUrl}`);
+
+        const shareUrl = createAnimaXShareUrl(nextJsonUrl);
+        try {
+          await copyPlainTextToClipboard(shareUrl);
+          toast.success('已复制分享链接了');
+          pushLog(`[信息] 重打包分享链接已复制：${shareUrl}`);
+        } catch (copyError) {
+          const message = copyError instanceof Error ? copyError.message : String(copyError);
+          toast.error('重打包完成，复制分享链接失败');
+          pushLog(`[警告] 重打包分享链接复制失败：${message}`);
+        }
+      } else if (options.exportLocal) {
+        toast.success('重打包完成');
+      }
     } catch (err) {
-      pushLog(`[错误] 重打包失败：${(err as Error)?.message ?? String(err)}`);
+      const message = err instanceof Error ? err.message : String(err);
+      const toastMessage =
+        localExportDone && cdnUploadStarted
+          ? `本地导出完成，CDN 上传失败：${message}`
+          : `重打包失败：${message}`;
+      toast.error(toastMessage);
+      pushLog(`[错误] 重打包失败：${message}`);
+      throw err;
     } finally {
       setIsRepacking(false);
+    }
+  };
+
+  const handleDownloadInputLottie = async () => {
+    if (isDownloadingLottie || isDirectoryUploading) return;
+
+    const sourceUrl = srcInput.trim();
+    if (!sourceUrl) {
+      toast.error('请输入 Lottie 链接');
+      return;
+    }
+
+    setIsDownloadingLottie(true);
+    pushLog(`[信息] Lottie 下载打包开始：${sourceUrl}`);
+    try {
+      const result = await createAnimaXDownloadBundle({
+        sourceUrl,
+        currentAnimation: {
+          sourceUrl: jsonEditorSourceUrlRef.current,
+          jsonText: jsonEditorTextRef.current,
+          resourceEdits: resourceEditsRef.current,
+        },
+      });
+      downloadBlob(result.blob, result.fileName);
+      pushLog(
+        `[信息] Lottie 下载打包完成：${result.fileName}，json=${result.jsonFileName}，图片=${result.downloadedImages}，视频=${result.downloadedVideos}，base64 图片=${result.skippedBase64Images}，base64 视频=${result.skippedBase64Videos}，字体=${result.downloadedFonts}`,
+      );
+      result.warnings.forEach((warning) => pushLog(`[警告] ${warning}`));
+      toast.success('Lottie 下载打包完成，已触发浏览器下载');
+    } catch (error) {
+      const detail = getJsonErrorMessage(error);
+      pushLog(`[错误] Lottie 下载打包失败：${detail}`);
+      toast.error(`Lottie 下载失败：${detail}`);
+    } finally {
+      setIsDownloadingLottie(false);
     }
   };
 
@@ -2840,12 +3525,14 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     scrubbingWasAnimatingRef.current = false;
   };
 
-  const createLocalResourceUrl = async (file: Blob, uploadDir: string, filename: string) => {
-    const safeName = getUploadFileName(filename || 'resource');
-    const resourceUrl = getLocalResourceUrl(uploadDir, safeName);
-    await putLocalResource(resourceUrl, file, safeName);
-    pushLog(`[信息] 已创建本地资源映射：${safeName} -> ${resourceUrl}`);
-    return resourceUrl;
+  const uploadToCdn = async (file: Blob, _uploadDir: string, filename: string) => {
+    await ensureCloudSession();
+    const form = new FormData();
+    form.append('file', file, filename);
+    const res = await fetch('/api/files', { method: 'POST', body: form });
+    const data = await res.json();
+    if (!res.ok || !data.url) throw new Error(data.error || `上传失败：HTTP ${res.status}`);
+    return data.url as string;
   };
 
   const uploadJsonAndReloadAnimation = async (
@@ -2868,13 +3555,19 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const fileName = `${safeSegment(options.label) || 'animation'}_${now}.json`;
     const uploadDir = `lottie/tmp/${options.uploadPrefix}_${now}`;
     const nextUrl = ensureHttpsUrl(
-      await createLocalResourceUrl(
-        new Blob([jsonText], { type: 'application/json' }),
-        uploadDir,
-        fileName,
-      ),
+      await uploadToCdn(new Blob([jsonText], { type: 'application/json' }), uploadDir, fileName),
     );
-    commitJsonEditorText(jsonText, true);
+    const editorJsonText = createEditorJsonText(jsonText);
+    commitJsonEditorText(editorJsonText, true);
+    jsonEditorSourceUrlRef.current = nextUrl;
+    setDirectoryProgress({
+      phase: 'loading',
+      title: '正在创建播放器',
+      detail: '使用已上传 CDN URL 创建播放器',
+      completed: 1,
+      total: 1,
+    });
+    await yieldToBrowser();
     loadAnimationSource(nextUrl, true);
     finishDirectoryProgress({
       phase: 'done',
@@ -2886,42 +3579,7 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return nextUrl;
   };
 
-  const handleDropFile = async (file: File) => {
-    const nextUrl = await createLocalResourceUrl(
-      file,
-      `lottie/tmp/drop_${Date.now()}`,
-      file.name,
-    );
-    clearResourceEdits();
-    clearLayerBoundsHighlight();
-    clearTextEdits();
-    clearLayerTransformEdits();
-    setTextDrafts({});
-    setSrcInput(nextUrl);
-    setSrc(nextUrl);
-    if (/\.(lottie\.json|json)$/i.test(file.name)) {
-      file
-        .text()
-        .then((text) => {
-          try {
-            const formatted = `${JSON.stringify(JSON.parse(text), null, 2)}\n`;
-            commitJsonEditorText(formatted);
-          } catch (error) {
-            setJsonEditorTextState(text);
-            setJsonPreviewStatus({
-              tone: 'error',
-              message: `JSON 语法错误：${getJsonErrorMessage(error)}`,
-            });
-          }
-        })
-        .catch(() => {
-          pushLog('[警告] 读取 JSON 失败');
-        });
-    }
-    pushLog(`[信息] 文件已加载：${file.name} (${Math.round(file.size / 1024)}KB)`);
-  };
-
-  const handlePickDirectory = async (files: File[]) => {
+  const handlePickDirectory = async (files: File[], options: UploadActionOptions = {}) => {
     if (isDirectoryUploading) return;
     try {
       await uploadPickedDirectory(files);
@@ -2935,10 +3593,11 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         completed: 0,
         total: 1,
       });
+      if (options.rethrow) throw new Error(`目录上传失败：${message}`);
     }
   };
 
-  const handlePickFiles = async (files: File[]) => {
+  const handlePickFiles = async (files: File[], options: UploadActionOptions = {}) => {
     if (isDirectoryUploading || files.length === 0) return;
 
     const zipFile =
@@ -2949,10 +3608,10 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         : undefined;
     if (!zipFile) {
       if (jsonFile) {
-        await handleSingleJsonFile(jsonFile);
+        await handleSingleJsonFile(jsonFile, options);
         return;
       }
-      await handlePickDirectory(files);
+      await handlePickDirectory(files, options);
       return;
     }
 
@@ -2968,38 +3627,149 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         completed: 0,
         total: 1,
       });
+      if (options.rethrow) throw new Error(`ZIP 加载失败：${message}`);
     }
   };
 
-  const handleSingleJsonFile = async (file: File) => {
+  const handleConfirmUploadSelection = async () => {
+    const selection = pendingUploadSelection;
+    if (!selection || isUploadDialogConfirming) return;
+
+    if (selection.invalidReason) {
+      setUploadDialogError(selection.invalidReason);
+      return;
+    }
+
+    setIsUploadDialogConfirming(true);
+    setUploadDialogError('');
+    setUploadDialogOpen(false);
+    setPendingUploadSelection(null);
+    try {
+      await new Promise<void>((resolve) => {
+        window.requestAnimationFrame(() => resolve());
+      });
+      if (selection.kind === 'directory') {
+        await handlePickDirectory(selection.files, { rethrow: true });
+      } else {
+        await handlePickFiles(selection.files, { rethrow: true });
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      pushLog(`[错误] 文件加载失败：${message}`);
+      toast.error(message.includes('失败') ? message : `加载失败：${message}`);
+    } finally {
+      setIsUploadDialogConfirming(false);
+    }
+  };
+
+  const handleSingleJsonFile = async (file: File, options: UploadActionOptions = {}) => {
     try {
       setDirectoryProgress({
         phase: 'scanning',
-        title: '正在解析 JSON',
+        title: '正在读取本地 JSON',
+        detail: `${file.name} · ${formatBytes(file.size)}`,
+        completed: 0,
+        total: 1,
+      });
+      await yieldToBrowser();
+      const text = await file.text();
+      setDirectoryProgress({
+        phase: 'scanning',
+        title: '正在校验 JSON 结构',
         detail: file.name,
         completed: 0,
         total: 1,
       });
-      const text = await file.text();
-      const parsed = JSON.parse(text) as any;
-      const relativeResourcePaths = collectRelativeResourcePaths(parsed);
+      await yieldToBrowser();
+      const inspection = await inspectJsonTextForUpload(text);
+      if (!inspection.previewable) {
+        const detail = '不是可预览的 Lottie/Animax JSON';
+        pushLog(`[错误] JSON 加载失败：${detail}`);
+        finishDirectoryProgress({
+          phase: 'error',
+          title: 'JSON 加载失败',
+          detail,
+          completed: 0,
+          total: 1,
+        });
+        if (options.rethrow) throw new HandledUploadError(detail);
+        return;
+      }
 
-      if (relativeResourcePaths.size > 0) {
+      setDirectoryProgress({
+        phase: 'scanning',
+        title: '正在扫描资源引用',
+        detail:
+          inspection.relativeResourcePaths.length > 0
+            ? `检测到 ${inspection.relativeResourcePaths.length} 个相对资源路径`
+            : '未发现同级资源引用',
+        completed: 0,
+        total: 1,
+      });
+      await yieldToBrowser();
+
+      if (inspection.relativeResourcePaths.length > 0) {
+        const detail = '含 images/videos/fonts 的 JSON 请改用“选择目录”或 zip';
         pushLog(
-          `[警告] ${file.name} 引用了 ${relativeResourcePaths.size} 个本地资源，单独选择 JSON 无法读取同级目录，请改用“选择目录”或上传 zip`,
+          `[警告] ${file.name} 引用了 ${inspection.relativeResourcePaths.length} 个本地资源，单独选择 JSON 无法读取同级目录，请改用“选择目录”或上传 zip`,
         );
         finishDirectoryProgress({
           phase: 'error',
           title: '缺少同级资源权限',
-          detail: '含 images/videos/fonts 的 JSON 请改用“选择目录”或 zip',
+          detail,
           completed: 0,
           total: 1,
         });
+        if (options.rethrow) throw new HandledUploadError(detail);
         return;
       }
 
-      await uploadPickedDirectory([attachRelativePath(file, file.name)]);
+      const editorJsonText = createEditorJsonText(text);
+      commitJsonEditorText(editorJsonText, true);
+      setDirectoryProgress({
+        phase: 'uploading',
+        title: '正在上传 JSON 到 CDN',
+        detail: file.name,
+        completed: 0,
+        total: 1,
+      });
+      await yieldToBrowser();
+      const now = Date.now();
+      const baseName = file.name.replace(/\.(lottie\.json|json)$/i, '');
+      const uploadDir = `lottie/tmp/${safeSegment(baseName) || 'upload'}_${now}`;
+      const uploadFileName = getUploadFileName(file.name, 'animation.json');
+      const nextUrl = ensureHttpsUrl(
+        await uploadToCdn(
+          new Blob([text], { type: file.type || 'application/json' }),
+          uploadDir,
+          uploadFileName,
+        ),
+      );
+      jsonEditorSourceUrlRef.current = nextUrl;
+      setDirectoryProgress({
+        phase: 'loading',
+        title: '正在创建播放器',
+        detail: '使用已上传 CDN URL 创建播放器',
+        completed: 1,
+        total: 1,
+      });
+      await yieldToBrowser();
+      loadAnimationSource(nextUrl, true);
+      finishDirectoryProgress({
+        phase: 'done',
+        title: '上传完成',
+        detail: '已生成可分享链接并开始预览',
+        completed: 1,
+        total: 1,
+      });
+      pushLog(
+        `[信息] 本地 JSON 已上传并加载：${file.name} (${Math.round(file.size / 1024)}KB) -> ${nextUrl}`,
+      );
     } catch (err) {
+      if (err instanceof HandledUploadError) {
+        if (options.rethrow) throw err;
+        return;
+      }
       const message = err instanceof Error ? err.message : String(err);
       pushLog(`[错误] JSON 加载失败：${message}`);
       finishDirectoryProgress({
@@ -3009,6 +3779,7 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         completed: 0,
         total: 1,
       });
+      if (options.rethrow) throw new Error(message);
     }
   };
 
@@ -3055,51 +3826,70 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       });
 
     if (jsonEntries.length === 0) {
-      window.alert('目录中未找到 JSON 文件');
-      pushLog('[错误] 目录中未找到 JSON 文件');
+      const detail = '目录中未找到 JSON 文件';
+      pushLog(`[错误] ${detail}`);
       finishDirectoryProgress({
         phase: 'error',
         title: '上传终止',
-        detail: '目录中未找到 JSON 文件',
+        detail,
         completed: 0,
         total: 1,
       });
-      return;
+      throw new Error(detail);
     }
 
     let picked = jsonEntries[0];
     let pickedJson: any = null;
+    let pickedJsonText = '';
+    let parseableJsonCount = 0;
     for (const entry of jsonEntries) {
+      setDirectoryProgress({
+        phase: 'scanning',
+        title: '正在选择主 JSON',
+        detail: entry.relPath,
+        completed: parseableJsonCount,
+        total: jsonEntries.length,
+      });
+      await yieldToBrowser();
       const text = await entry.file.text();
       try {
-        const parsed = JSON.parse(text) as any;
-        const isLottieJson =
-          Array.isArray(parsed?.layers) ||
-          Array.isArray(parsed?.assets) ||
-          Array.isArray(parsed?.videos) ||
-          typeof parsed?.fr === 'number';
-        if (!pickedJson || isLottieJson) {
+        const inspection = await inspectJsonTextForUpload(text);
+        parseableJsonCount += 1;
+        if (inspection.previewable) {
           picked = entry;
-          pickedJson = parsed;
+          pickedJsonText = text;
+          break;
         }
-        if (isLottieJson) break;
       } catch {
         // Continue scanning other JSON files.
       }
     }
 
-    if (!pickedJson) {
-      window.alert('目录中的 JSON 无法解析');
-      pushLog('[错误] 目录中的 JSON 无法解析');
+    if (!pickedJsonText) {
+      const detail =
+        parseableJsonCount > 0
+          ? '目录中未找到可预览的 Lottie/Animax JSON'
+          : '目录中的 JSON 无法解析';
+      pushLog(`[错误] ${detail}`);
       finishDirectoryProgress({
         phase: 'error',
         title: '上传终止',
-        detail: '目录中的 JSON 无法解析',
+        detail,
         completed: 0,
         total: 1,
       });
-      return;
+      throw new Error(detail);
     }
+
+    setDirectoryProgress({
+      phase: 'scanning',
+      title: '正在解析主 JSON',
+      detail: picked.relPath,
+      completed: jsonEntries.length,
+      total: jsonEntries.length,
+    });
+    await yieldToBrowser();
+    pickedJson = JSON.parse(pickedJsonText) as any;
 
     pushLog(`[信息] 已选择目录：${sorted.length} 个文件，主文件=${picked.relPath}`);
 
@@ -3136,6 +3926,14 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     };
 
     const referencedResources = new Set<string>();
+    setDirectoryProgress({
+      phase: 'scanning',
+      title: '正在定位引用资源',
+      detail: picked.relPath,
+      completed: 0,
+      total: 1,
+    });
+    await yieldToBrowser();
     if (Array.isArray(pickedJson.assets)) {
       pickedJson.assets.forEach((asset: any) => {
         if (!asset || Array.isArray(asset.layers)) return;
@@ -3198,8 +3996,8 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           .filter(Boolean)
           .join('/');
         const uploadDir = subDir ? `${uploadPrefix}/${subDir}` : uploadPrefix;
-        const resourceUrl = await createLocalResourceUrl(content, uploadDir, name);
-        return { file: item.file, resourceUrl, relPath } as const;
+        const cdnUrl = await uploadToCdn(content, uploadDir, name);
+        return { file: item.file, cdnUrl, relPath } as const;
       } catch (err) {
         pushLog(`[错误] 上传失败：${relPath}: ${(err as Error)?.message ?? String(err)}`);
         return null;
@@ -3217,20 +4015,32 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
     };
 
-    const resourceResults = await Promise.all(
-      uploadEntries.map((item) =>
+    const resourceResults = await mapWithConcurrency(
+      uploadEntries,
+      RESOURCE_UPLOAD_CONCURRENCY,
+      (item) =>
         uploadOne(item, item.file, undefined, {
           phase: 'uploading',
           title: '正在上传资源',
           detail: item.relPath,
         }),
-      ),
     );
     const uploadedByRelPath = new Map<string, string>();
     resourceResults.forEach((result) => {
-      if (result) uploadedByRelPath.set(result.relPath, ensureHttpsUrl(result.resourceUrl));
+      if (result) uploadedByRelPath.set(result.relPath, ensureHttpsUrl(result.cdnUrl));
     });
 
+    setDirectoryProgress({
+      phase: 'json',
+      title: '正在生成预览 JSON',
+      detail:
+        uploadedByRelPath.size > 0
+          ? `已替换 ${uploadedByRelPath.size} 个资源链接`
+          : '未发现需要替换的资源链接',
+      completed: completedUploads,
+      total: totalUploads,
+    });
+    await yieldToBrowser();
     const nextJson = JSON.parse(JSON.stringify(pickedJson)) as any;
     if (Array.isArray(nextJson.assets)) {
       nextJson.assets.forEach((asset: any) => {
@@ -3266,7 +4076,8 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       });
     }
 
-    const nextJsonText = `${JSON.stringify(nextJson, null, 2)}\n`;
+    const nextJsonText = JSON.stringify(nextJson);
+    const editorJsonText = createEditorJsonText(nextJsonText);
     setDirectoryProgress({
       phase: 'json',
       title: '正在上传 JSON',
@@ -3291,25 +4102,27 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       return;
     }
 
-    const nextUrl = ensureHttpsUrl(mainResult.resourceUrl);
+    const nextUrl = ensureHttpsUrl(mainResult.cdnUrl);
     setDirectoryProgress({
       phase: 'loading',
-      title: '正在加载动画',
-      detail: '所有资源已上传，正在创建播放器',
+      title: '正在创建播放器',
+      detail: '使用已上传 CDN URL 创建播放器',
       completed: totalUploads,
       total: totalUploads,
     });
+    await yieldToBrowser();
     if (options.pendingResourceReplacement) {
       pendingResourceReplacementRef.current = options.pendingResourceReplacement;
     }
-    commitJsonEditorText(nextJsonText);
+    commitJsonEditorText(editorJsonText, true);
+    jsonEditorSourceUrlRef.current = nextUrl;
     loadAnimationSource(nextUrl, true, {
       preservePendingResourceReplacement: Boolean(options.pendingResourceReplacement),
     });
     finishDirectoryProgress({
       phase: 'done',
       title: '上传完成',
-      detail: '已更新链接并开始加载',
+      detail: '已更新链接并开始预览',
       completed: totalUploads,
       total: totalUploads,
     });
@@ -3440,35 +4253,205 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       [row.id]: { id: row.id, style: cleanStyle },
     };
 
+    const baseUrl =
+      jsonResourceBaseUrlRef.current || getJsonResourceBaseUrl(src) || getJsonResourceBaseUrl(srcInput);
+    const prepared = preparePreviewJsonText(nextJson, baseUrl);
+    clearJsonAutoRefreshTimer();
     const element = animRef.current;
-    if (element) {
-      const applied = await applyFontStyleEdit(element, { id: row.id, style: cleanStyle });
-      if (!applied) {
-        throw new Error(`字体 Style 更新失败：${row.id}`);
-      }
-      element.seek(currentFrameRef.current);
-    }
-
+    if (element) stopForRestartUpdate(element);
+    // FontStyle hot updates can leave stale glyph state; initialize it from JSON instead.
+    // Keep resource edits and their object URLs alive for the replacement player.
     commitJsonEditorText(nextJson);
     commitFontStyleEdits(nextFontStyleEdits);
+    clearLayerBoundsHighlight();
+    currentFrameRef.current = 0;
+    setCurrentFrame(0);
+    setIsReady(false);
+    markPaused(1200);
+    setPreviewJsonText(prepared.jsonText);
+    setAnimaxViewKey((previous) => previous + 1);
+    pushLog(`[信息] 字体 Style 已写入 JSON，重新加载播放器：${row.id} -> ${cleanStyle}`);
     toast.success(`字体 Style 已更新：${row.id} -> ${cleanStyle}`);
   };
+
+  const fetchVideoRowFile = async (row: AssetRow) => {
+    if (row.kind !== 'video') throw new Error('只有视频资源支持该操作');
+    if (!row.previewUrl) throw new Error('当前视频缺少可读取的预览地址');
+
+    const response = await fetch(row.previewUrl);
+    if (!response.ok) throw new Error(`读取视频失败：HTTP ${response.status}`);
+
+    const blob = await response.blob();
+    const fileName = getResourcePathFileName(row.name || row.id, `${row.id}.mp4`);
+    return new File([blob], fileName, { type: blob.type || 'video/mp4' });
+  };
+
+  const fetchImageRowFile = async (row: AssetRow) => {
+    if (row.kind !== 'image') throw new Error('只有图片资源支持该操作');
+    if (!row.previewUrl) throw new Error('当前图片缺少可读取的预览地址');
+
+    const response = await fetch(row.previewUrl);
+    if (!response.ok) throw new Error(`读取图片失败：HTTP ${response.status}`);
+
+    const blob = await response.blob();
+    const fileName = getResourcePathFileName(row.name || row.id, `${row.id}.jpg`);
+    return new File([blob], fileName, { type: blob.type || 'image/jpeg' });
+  };
+
+  const createVideoPackPath = (row: AssetRow, fileName: string) =>
+    `videos/${safeSegment(row.id) || 'video'}_${Date.now()}${getFileExtension(fileName) || '.mp4'}`;
+
+  const createImagePackPath = (row: AssetRow, fileName: string) =>
+    `images/${safeSegment(row.id) || 'image'}_${Date.now()}${getFileExtension(fileName) || '.png'}`;
+
+  const handleProcessVideoResource = async (
+    row: AssetRow,
+    options: VideoProcessOptions,
+    onProgress?: (progress: VideoProcessProgress) => void,
+  ): Promise<ProcessedVideoResource> => {
+    if (row.kind !== 'video') throw new Error('只有视频资源支持处理');
+
+    const actionName = '插入 I 帧';
+    pushLog(`[信息] 视频${actionName}开始：${row.id}`);
+    const inputFile = await fetchVideoRowFile(row);
+    const processed = await processVideoResource({
+      file: inputFile,
+      fileName: inputFile.name,
+      options,
+      onProgress,
+    });
+    const blobUrl = URL.createObjectURL(processed.file);
+
+    pushLog(
+      `[信息] 视频${actionName}完成：${row.id}，${formatBytes(inputFile.size)} -> ${formatBytes(
+        processed.file.size,
+      )}`,
+    );
+
+    return {
+      file: processed.file,
+      fileName: processed.fileName,
+      packPath: createVideoPackPath(row, processed.fileName),
+      blobUrl,
+      originalSizeBytes: inputFile.size,
+      outputSizeBytes: processed.file.size,
+    };
+  };
+
+  const handleProcessImageToPng8Resource = async (
+    row: AssetRow,
+    onProgress?: (progress: VideoProcessProgress) => void,
+  ): Promise<ProcessedImageResource> => {
+    if (row.kind !== 'image') throw new Error('只有图片资源支持处理');
+
+    pushLog(`[信息] 图片 PNG8 转换开始：${row.id}`);
+    const inputFile = await fetchImageRowFile(row);
+    const processed = await processImageToPng8Resource({
+      file: inputFile,
+      fileName: inputFile.name,
+      onProgress,
+    });
+    const blobUrl = URL.createObjectURL(processed.file);
+
+    pushLog(
+      `[信息] 图片 PNG8 转换完成：${row.id}，${formatBytes(inputFile.size)} -> ${formatBytes(
+        processed.file.size,
+      )}`,
+    );
+
+    return {
+      file: processed.file,
+      fileName: processed.fileName,
+      packPath: createImagePackPath(row, processed.fileName),
+      blobUrl,
+      originalSizeBytes: inputFile.size,
+      outputSizeBytes: processed.file.size,
+    };
+  };
+
+  const handleProbeVideoResource = async (
+    row: AssetRow,
+    onProgress?: (progress: VideoProcessProgress) => void,
+  ): Promise<VideoResourceInfo> => {
+    if (row.kind !== 'video') throw new Error('只有视频资源支持该操作');
+
+    const inputFile = await fetchVideoRowFile(row);
+    return probeVideoResource({
+      file: inputFile,
+      fileName: inputFile.name,
+      onProgress,
+    });
+  };
+
+  useEffect(() => {
+    const videoRowsToCheck = assetRows.filter(
+      (row) =>
+        row.kind === 'video' && row.previewUrl && (!row.check || row.check.status === 'idle'),
+    );
+    if (videoRowsToCheck.length === 0) return;
+
+    let cancelled = false;
+    videoRowsToCheck.forEach((row) => {
+      const resourceKey = createResourceKey('video', row.id);
+      setResourceCheckResults((previous) => {
+        if (previous[resourceKey] && previous[resourceKey].status !== 'idle') return previous;
+        return {
+          ...previous,
+          [resourceKey]: {
+            status: 'checking',
+            issues: [],
+            message: '正在检查视频帧类型',
+          },
+        };
+      });
+
+      handleProbeVideoResource(row)
+        .then((info) => {
+          if (cancelled) return;
+          setResourceCheckResults((previous) => ({
+            ...previous,
+            [resourceKey]: info.hasBFrames
+              ? createVideoBFramesCheckResult(info.bFrameCount)
+              : RESOURCE_CHECK_OK,
+          }));
+        })
+        .catch((err) => {
+          if (cancelled) return;
+          setResourceCheckResults((previous) => ({
+            ...previous,
+            [resourceKey]: {
+              status: 'error',
+              issues: [],
+              message: err instanceof Error ? err.message : String(err),
+            },
+          }));
+        });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [videoResourceCheckSignature]);
 
   const applyResourceReplacement = async (
     target: { kind: ResourceKind; id: string },
     nextUrl: string,
     fileName: string,
     file?: File,
+    options?: { packPath?: string; local?: boolean; preserveJsonPath?: boolean },
   ) => {
     const element = animRef.current;
     if (element) stopForRestartUpdate(element);
 
-    const nextJson = updateJsonResourcePath(
-      jsonEditorTextRef.current,
-      target.kind,
-      target.id,
-      nextUrl,
-    );
+    const nextJson = options?.preserveJsonPath
+      ? jsonEditorTextRef.current
+      : updateJsonResourcePath(
+          jsonEditorTextRef.current,
+          target.kind,
+          target.id,
+          nextUrl,
+          options?.packPath,
+        );
     const currentFontOrigin =
       target.kind === 'font'
         ? getFontOriginFromJsonText(jsonEditorTextRef.current, target.id)
@@ -3491,6 +4474,7 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       const repackResult = await createAnimaXRepack({
         jsonText: nextJson,
         sourceUrl: src,
+        resourceEdits: resourceEditsRef.current,
       });
       repackResult.warnings.forEach((warning) => pushLog(`[警告] ${warning}`));
       pushLog(
@@ -3513,6 +4497,8 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       url: nextUrl,
       fileName,
       file,
+      packPath: options?.packPath,
+      local: options?.local,
     };
     const nextResourceEdits = {
       ...resourceEditsRef.current,
@@ -3521,6 +4507,13 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     commitJsonEditorText(nextJson);
     commitResourceEdits(nextResourceEdits);
+    setResourceCheckResults((previous) => {
+      const resourceKey = createResourceKey(target.kind, target.id);
+      if (!previous[resourceKey]) return previous;
+      const next = { ...previous };
+      delete next[resourceKey];
+      return next;
+    });
 
     pendingResourceReplacementRef.current = {
       kind: target.kind,
@@ -3535,6 +4528,142 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     pushLog(`[信息] ${getResourceKindName(target.kind)}已替换，等待播放器重建：${target.id}`);
   };
 
+  const handleApplyProcessedVideoResource = async (
+    row: AssetRow,
+    processed: ProcessedVideoResource,
+  ) => {
+    if (row.kind !== 'video') throw new Error('只有视频资源支持处理结果替换');
+
+    const resourceKey = createResourceKey('video', row.id);
+    const previousUrl = resourceObjectUrlsRef.current[resourceKey];
+    if (previousUrl && previousUrl !== processed.blobUrl) {
+      URL.revokeObjectURL(previousUrl);
+    }
+    resourceObjectUrlsRef.current[resourceKey] = processed.blobUrl;
+
+    await applyResourceReplacement(
+      { kind: 'video', id: row.id },
+      processed.blobUrl,
+      processed.fileName,
+      processed.file,
+      {
+        packPath: processed.packPath,
+        local: true,
+      },
+    );
+    pushLog(
+      `[信息] 视频已使用本地文件预览，重打包时会写入 ZIP：${row.id} -> ${processed.packPath}`,
+    );
+  };
+
+  const handleApplyProcessedImageResource = async (
+    row: AssetRow,
+    processed: ProcessedImageResource,
+  ) => {
+    if (row.kind !== 'image') throw new Error('只有图片资源支持处理结果替换');
+
+    const rawResourcePath = row.resourcePath || row.previewUrl || '';
+    if (isHttpResourcePath(rawResourcePath)) {
+      throw new Error('图片 url 需要业务自行处理');
+    }
+
+    const resourceKey = createResourceKey('image', row.id);
+    const previousUrl = resourceObjectUrlsRef.current[resourceKey];
+    if (previousUrl && previousUrl !== processed.blobUrl) {
+      URL.revokeObjectURL(previousUrl);
+    }
+
+    if (isBase64ResourcePath(rawResourcePath)) {
+      const dataUrl = await fileToDataUrl(processed.file);
+      resourceObjectUrlsRef.current[resourceKey] = dataUrl;
+      await applyResourceReplacement(
+        { kind: 'image', id: row.id },
+        dataUrl,
+        processed.fileName,
+        undefined,
+      );
+      setResourceCheckResults((previous) => ({
+        ...previous,
+        [resourceKey]: RESOURCE_CHECK_OK,
+      }));
+      pushLog(`[信息] base64 图片已转换为 PNG8 data URL：${row.id}`);
+      return;
+    }
+
+    resourceObjectUrlsRef.current[resourceKey] = processed.blobUrl;
+    const packPath = rawResourcePath.trim().replace(/^\/+/, '') || processed.packPath;
+
+    await applyResourceReplacement(
+      { kind: 'image', id: row.id },
+      processed.blobUrl,
+      processed.fileName,
+      processed.file,
+      {
+        packPath,
+        local: true,
+        preserveJsonPath: true,
+      },
+    );
+    setResourceCheckResults((previous) => ({
+      ...previous,
+      [resourceKey]: RESOURCE_CHECK_OK,
+    }));
+    pushLog(`[信息] 本地路径图片已转换为 PNG8，重打包时会覆盖同一路径：${row.id} -> ${packPath}`);
+  };
+
+  const handleFixResource = async (row: AssetRow) => {
+    const issues = row.check?.issues ?? [];
+    if (issues.length === 0) return;
+
+    if (row.kind === 'image' && issues.some((issue) => issue.code === 'image-jpg')) {
+      if (isHttpResourcePath(row.resourcePath || '')) {
+        throw new Error('图片 url 需要业务自行处理');
+      }
+      const processed = await handleProcessImageToPng8Resource(row);
+      await handleApplyProcessedImageResource(row, processed);
+      toast.success(`图片已转换为 PNG8：${row.id}`);
+      return;
+    }
+
+    if (row.kind === 'video' && issues.some((issue) => issue.code === 'video-b-frames')) {
+      const processed = await handleProcessVideoResource(row, {
+        iframeMode: 'frames',
+        iframeIntervalFrames: 30,
+        noBFrames: true,
+      });
+      await handleApplyProcessedVideoResource(row, processed);
+      setResourceCheckResults((previous) => ({
+        ...previous,
+        [createResourceKey('video', row.id)]: RESOURCE_CHECK_OK,
+      }));
+      toast.success(`视频已移除 B 帧：${row.id}`);
+      return;
+    }
+
+    throw new Error(`暂不支持自动修复 ${row.id} 的资源问题`);
+  };
+
+  const handleFixAllResources = async () => {
+    if (isFixingResources) return;
+    const rowsToFix = assetRows.filter(hasFixableIssue);
+    if (rowsToFix.length === 0) return;
+
+    setIsFixingResources(true);
+    try {
+      for (const row of rowsToFix) {
+        await handleFixResource(row);
+      }
+      toast.success(`资源修复完成：${rowsToFix.length} 个`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      pushLog(`[错误] 资源修复失败：${message}`);
+      toast.error(`资源修复失败：${message}`);
+      throw err;
+    } finally {
+      setIsFixingResources(false);
+    }
+  };
+
   const handleReplacementFile = async (file: File) => {
     const target = replacementTargetRef.current;
     if (!target) return;
@@ -3543,12 +4672,12 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       const uploadFileName = `${safeSegment(target.id) || 'resource'}_${Date.now()}${
         getFileExtension(file.name) || (target.kind === 'image' ? '.png' : '')
       }`;
-      const resourceUrl = await createLocalResourceUrl(
+      const cdnUrl = await uploadToCdn(
         file,
         `lottie/tmp/tools/${safeSegment(target.id) || 'resource'}`,
         uploadFileName,
       );
-      await applyResourceReplacement(target, ensureHttpsUrl(resourceUrl), uploadFileName, file);
+      await applyResourceReplacement(target, ensureHttpsUrl(cdnUrl), uploadFileName, file);
     } catch (err) {
       const message = (err as Error)?.message ?? String(err);
       pushLog(`[错误] 替换失败：${message}`);
@@ -3612,37 +4741,66 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     input.setAttribute('directory', '');
   }, []);
 
+  useEffect(
+    () => () => {
+      Object.values(resourceObjectUrlsRef.current).forEach((url) => {
+        URL.revokeObjectURL(url);
+      });
+      resourceObjectUrlsRef.current = {};
+    },
+    [],
+  );
+
   useEffect(() => {
     let disposed = false;
+    const getRuntimeFontLabel = (status: AnimaXRuntimeStatus) => {
+      if (status.fontLoaded) return '已加载';
+      if (status.fontLoading) return '加载中';
+      if (status.fontTimedOut) return '超时';
+      return '失败';
+    };
 
-    ensureAnimaXRuntimeInitialized({
-      onLog: (line) => {
-        if (!disposed) pushLog(line);
-      },
-    })
-      .then((status) => {
-        if (disposed) return;
-        setRuntimeStatus(status);
-        setRuntimeReady(status.ready);
-        if (status.ready) {
-          setRuntimeError(null);
+    const applyRuntimeStatus = (status: AnimaXRuntimeStatus, logSummary: boolean) => {
+      setRuntimeStatus(status);
+      setRuntimeReady(status.ready);
+      if (status.ready) {
+        setRuntimeError(null);
+        if (logSummary) {
           pushLog(
-            `[信息] 运行时可用：字体=${status.fontLoaded ? '已加载' : '失败'}(${
-              status.fontCount
-            } 组)，Textra=${status.textraModuleLoaded ? '已加载' : '失败'}(${Math.round(
-              status.textraModuleBytes / 1024,
-            )}KB，${
+            `[信息] 运行时可用：字体=${getRuntimeFontLabel(status)}(${status.fontCount} 组)，Textra=${
+              status.textraModuleLoaded ? '已加载' : '失败'
+            }(${Math.round(status.textraModuleBytes / 1024)}KB，${
               status.textraModuleFromCache ? '本地缓存' : '网络下载'
             })，视频=${status.videoModuleLoaded ? '已加载' : '失败'}(${Math.round(
               status.videoModuleBytes / 1024,
             )}KB，${status.videoModuleFromCache ? '本地缓存' : '网络下载'})`,
           );
-          return;
         }
+        return;
+      }
 
-        const message = status.warnings.join('；') || '字体、Textra 或视频模块未完成加载';
-        setRuntimeError(message);
+      const message = status.warnings.join('；') || 'Textra 或视频模块未完成加载';
+      setRuntimeError(message);
+      if (logSummary) {
         pushLog(`[错误] 运行时未就绪，播放器不会挂载：${message}`);
+      }
+    };
+
+    ensureAnimaXRuntimeInitialized({
+      onLog: (line) => {
+        if (!disposed) {
+          const detail = line.replace(/^\[[^\]]+\]\s*/, '').replace(/^运行时初始化：/, '');
+          if (detail) setRuntimeInitDetail(detail);
+          pushLog(line);
+        }
+      },
+      onStatus: (status) => {
+        if (!disposed) applyRuntimeStatus(status, false);
+      },
+    })
+      .then((status) => {
+        if (disposed) return;
+        applyRuntimeStatus(status, true);
       })
       .catch((err: unknown) => {
         if (disposed) return;
@@ -3666,7 +4824,14 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   useEffect(() => {
     const url = src.trim();
-    if (!/\.(lottie\.json|json)(\?|#|$)/i.test(url)) return;
+    if (!/\.(lottie\.json|json)(\?|#|$)/i.test(url)) {
+      setSourceTextLoadStatus(createIdleSourceTextStatus());
+      return;
+    }
+    if (jsonEditorSourceUrlRef.current === url) {
+      setSourceTextLoadStatus(createIdleSourceTextStatus());
+      return;
+    }
     const preserveResourceState = Boolean(pendingResourceReplacementRef.current);
 
     const controller = new AbortController();
@@ -3674,29 +4839,46 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     (async () => {
       try {
+        setSourceTextLoadStatus({
+          loading: true,
+          title: '正在下载远程 JSON',
+          detail: getUrlFileName(url, 'remote.json'),
+        });
         const res = await fetch(url, { signal: controller.signal });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const text = await res.text();
         if (!alive) return;
-        try {
-          const formatted = `${JSON.stringify(JSON.parse(text), null, 2)}\n`;
-          commitJsonEditorText(formatted);
-        } catch (error) {
-          setJsonEditorTextState(text);
-          setJsonPreviewStatus({
-            tone: 'error',
-            message: `JSON 语法错误：${getJsonErrorMessage(error)}`,
-          });
+        setSourceTextLoadStatus({
+          loading: true,
+          title: '正在校验 JSON',
+          detail: getUrlFileName(url, 'remote.json'),
+        });
+        await yieldToBrowser();
+        const inspection = await inspectJsonTextForUpload(text);
+        if (!alive) return;
+        if (!inspection.previewable) {
+          throw new Error('不是可预览的 Lottie/Animax JSON');
         }
+        const editorJsonText = createEditorJsonText(text);
+        commitJsonEditorText(editorJsonText, true);
+        jsonEditorSourceUrlRef.current = url;
         if (!preserveResourceState) {
           clearResourceEdits();
           clearTextEdits();
           clearLayerTransformEdits();
           setTextDrafts({});
         }
+        setSourceTextLoadStatus(createIdleSourceTextStatus());
       } catch (err) {
         if (!alive) return;
         if ((err as any)?.name === 'AbortError') return;
-        pushLog(`[警告] 拉取 JSON 失败：${(err as Error)?.message ?? String(err)}`);
+        const message = (err as Error)?.message ?? String(err);
+        setSourceTextLoadStatus(createIdleSourceTextStatus());
+        setJsonPreviewStatus({
+          tone: 'error',
+          message: `JSON 加载失败：${message}`,
+        });
+        pushLog(`[警告] 拉取 JSON 失败：${message}`);
       }
     })();
 
@@ -3708,14 +4890,16 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   useEffect(() => {
     if (!canvasElement) return;
-    const padding = 18;
-    const progressReserve = 84;
+    const isCardLayout = getLocationParam('layout') === 'card';
+    const padding = isCardLayout ? 8 : 18;
+    const progressReserve = isCardLayout ? 54 : 84;
+    const minStageSize = isCardLayout ? 120 : 240;
 
     const compute = () => {
       const rect = canvasElement.getBoundingClientRect();
       const w = Math.max(0, rect.width - padding * 2);
       const h = Math.max(0, rect.height - padding * 2 - progressReserve);
-      const next = Math.max(240, Math.min(960, Math.floor(Math.min(w, h))));
+      const next = Math.max(minStageSize, Math.min(960, Math.floor(Math.min(w, h))));
       setStageSize((prev) => (prev === next ? prev : next));
     };
 
@@ -3732,11 +4916,21 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return () => {
       alphaZipPromptResolverRef.current?.(false);
       alphaZipPromptResolverRef.current = null;
+      if (objectUrlRef.current) {
+        URL.revokeObjectURL(objectUrlRef.current);
+        objectUrlRef.current = null;
+      }
       clearJsonAutoRefreshTimer();
       if (directoryUploadClearTimerRef.current !== null) {
         window.clearTimeout(directoryUploadClearTimerRef.current);
         directoryUploadClearTimerRef.current = null;
       }
+      if (frameUiCommitTimerRef.current !== null) {
+        window.clearTimeout(frameUiCommitTimerRef.current);
+        frameUiCommitTimerRef.current = null;
+      }
+      jsonAnalysisWorkerRef.current?.terminate();
+      jsonAnalysisWorkerRef.current = null;
     };
   }, []);
 
@@ -3751,7 +4945,11 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       const frames = subscribedUpdateFramesRef.current;
       if (frames.length === 0) return;
       if (typeof element.unsubscribeUpdateEvents === 'function') {
-        element.unsubscribeUpdateEvents(frames);
+        try {
+          element.unsubscribeUpdateEvents(frames);
+        } catch (error) {
+          console.warn('[animax] 取消帧更新订阅失败，已忽略', error);
+        }
       }
       subscribedUpdateFramesRef.current = [];
     };
@@ -3759,10 +4957,22 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const syncUpdateSubscriptions = (total: number) => {
       if (!Number.isFinite(total) || total <= 0) return;
       const frameCount = Math.ceil(total);
-      const frames = Array.from({ length: frameCount }, (_, index) => index);
+      const step = Math.max(1, Math.ceil(frameCount / UPDATE_EVENT_SUBSCRIPTION_LIMIT));
+      const frames = Array.from(
+        { length: Math.ceil(frameCount / step) },
+        (_, index) => index * step,
+      );
+      const lastFrame = Math.max(0, frameCount - 1);
+      if (!frames.includes(lastFrame)) frames.push(lastFrame);
       clearUpdateSubscriptions();
-      element.subscribeUpdateEvents(frames);
-      subscribedUpdateFramesRef.current = frames;
+      if (typeof element.subscribeUpdateEvents !== 'function') return;
+      try {
+        element.subscribeUpdateEvents(frames);
+        subscribedUpdateFramesRef.current = frames;
+      } catch (error) {
+        subscribedUpdateFramesRef.current = [];
+        console.warn('[animax] 注册帧更新订阅失败，已忽略', error);
+      }
     };
 
     const scheduleDurationRefresh = () => {
@@ -3789,11 +4999,17 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       const detail = (e as CustomEvent<any>).detail;
       const nextTotal = Number(detail?.total);
       const nextCurrent = Number(detail?.current);
+      const immediateFrameState: { current?: number; total?: number } = {};
       if (Number.isFinite(nextTotal) && nextTotal > 0) {
-        setTotalFrame(nextTotal);
+        totalFrameRef.current = nextTotal;
+        immediateFrameState.total = nextTotal;
         syncUpdateSubscriptions(nextTotal);
       }
-      if (Number.isFinite(nextCurrent)) setCurrentFrame(nextCurrent);
+      if (Number.isFinite(nextCurrent)) {
+        currentFrameRef.current = nextCurrent;
+        immediateFrameState.current = nextCurrent;
+      }
+      commitFrameUiState(immediateFrameState, true);
       scheduleDurationRefresh();
       setIsReady(true);
       pushLog('[信息] 动画已就绪');
@@ -3834,7 +5050,6 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           ? resourceEditsRef.current[pendingResourceKey]
           : null;
         const editedResourceCount = applyEditedResources(element);
-        const editedFontStyleCount = await applyEditedFontStyles(element);
         const editedTextCount = await applyEditedTexts(element);
         const editedLayerTransformCount = await applyEditedLayerTransforms(element);
         if (animRef.current !== element) return;
@@ -3861,10 +5076,6 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           );
         } else if (editedResourceCount > 0) {
           pushLog(`[信息] 已恢复历史资源替换：${editedResourceCount} 个`);
-        }
-
-        if (editedFontStyleCount > 0) {
-          pushLog(`[信息] 已恢复历史字体 Style 替换：${editedFontStyleCount} 个`);
         }
 
         if (editedTextCount > 0) {
@@ -3898,12 +5109,22 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       const nextCurrent = Number(detail?.current);
       const ignoreRuntimeFrameSync = performance.now() < suppressRuntimeFrameSyncUntilRef.current;
       const previousFrame = currentFrameRef.current;
-      if (Number.isFinite(nextTotal) && nextTotal > 0) setTotalFrame(nextTotal);
-      if (ignoreRuntimeFrameSync) return;
+      const nextUiFrameState: { current?: number; total?: number } = {};
+      if (Number.isFinite(nextTotal) && nextTotal > 0) {
+        totalFrameRef.current = nextTotal;
+        nextUiFrameState.total = nextTotal;
+      }
+      if (ignoreRuntimeFrameSync) {
+        if (Number.isFinite(nextUiFrameState.total)) {
+          commitFrameUiState(nextUiFrameState);
+        }
+        return;
+      }
       if (Number.isFinite(nextCurrent)) {
         const isFrameMoving = Math.abs(nextCurrent - previousFrame) > 0.001;
         currentFrameRef.current = nextCurrent;
-        setCurrentFrame(nextCurrent);
+        nextUiFrameState.current = nextCurrent;
+        commitFrameUiState(nextUiFrameState);
         if (
           isFrameMoving &&
           isPausedRef.current &&
@@ -3924,8 +5145,16 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       const detail = (e as CustomEvent<any>).detail;
       const nextTotal = Number(detail?.total);
       const nextCurrent = Number(detail?.current);
-      if (Number.isFinite(nextTotal) && nextTotal > 0) setTotalFrame(nextTotal);
-      if (Number.isFinite(nextCurrent)) setCurrentFrame(nextCurrent);
+      const nextUiFrameState: { current?: number; total?: number } = {};
+      if (Number.isFinite(nextTotal) && nextTotal > 0) {
+        totalFrameRef.current = nextTotal;
+        nextUiFrameState.total = nextTotal;
+      }
+      if (Number.isFinite(nextCurrent)) {
+        currentFrameRef.current = nextCurrent;
+        nextUiFrameState.current = nextCurrent;
+      }
+      commitFrameUiState(nextUiFrameState, true);
       if (loopRef.current || element.isAnimating()) return;
       markPaused(0);
       pushLog('[信息] 播放完成');
@@ -4003,12 +5232,18 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         jsonEditorText,
         jsonPreviewStatus,
         jsonSizeBytes,
+        jsonAnalysisStatus: jsonAnalysis.status,
+        jsonAnalysisError: jsonAnalysis.error,
+        lottieLoadStatus,
+        previewStageStatus,
         parsedJson,
         composition,
         textLayerRows,
         layerRows,
         textDrafts,
         assetRows,
+        resourceWarningCount,
+        isFixingResources,
         activeLayerBoundsKeys,
         layerBoundsOverlays,
         selectedLayerKey,
@@ -4022,15 +5257,24 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         setDynamicResourceCode,
         isDraggingFile,
         setIsDraggingFile,
+        uploadDialogOpen,
+        pendingUploadSelection,
+        uploadDialogError,
+        isUploadDialogConfirming,
         directoryUploadProgress,
         isDirectoryUploading,
         runtimeReady,
         runtimeStatus,
         runtimeError,
+        isAnimationReady: isReady,
+        repackDialogOpen,
+        packageRecordsOpen,
+        packageRecords,
         canConfirm,
         canApplyDynamicResourceCode,
         canRepack,
         isRepacking,
+        isDownloadingLottie,
         canRefreshJsonPreview,
         canResetJsonEditor,
         canRandomLottie,
@@ -4044,15 +5288,28 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         handleRefreshJsonPreview,
         handleResetJsonEditor,
         handleLoadRandomLottie,
+        handleOpenRepackDialog,
+        handleCloseRepackDialog,
         handleRepack,
+        handleDownloadInputLottie,
+        handleOpenPackageRecords,
+        handleClosePackageRecords,
+        handleLoadPackageRecord,
+        handleCopyPackageRecordShareLink,
+        handleRemovePackageRecord,
         handleCopyShareLink,
+        handleCopyCardShareLink,
         handleTogglePlay,
         handleProgressChange,
         handleScrubStart,
         handleScrubEnd,
-        handleDropFile,
-        handlePickDirectory,
-        handlePickFiles,
+        handleOpenUploadDialog,
+        handleCloseUploadDialog,
+        handleResetUploadSelection,
+        handleSelectUploadFiles,
+        handleSelectUploadDirectory,
+        handleUploadDrop,
+        handleConfirmUploadSelection,
         handleTextDraftChange,
         handleTextLayerUpdate,
         handleToggleLayerBounds,
@@ -4070,6 +5327,11 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         handleReplaceResource,
         handleReplaceResourceFromUrl,
         handleReplaceFontStyle,
+        handleProcessVideoResource,
+        handleProbeVideoResource,
+        handleApplyProcessedVideoResource,
+        handleFixResource,
+        handleFixAllResources,
         handleReplacementFile,
         handleCycleSpeed,
         handleToggleLoop,

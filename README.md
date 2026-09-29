@@ -95,3 +95,47 @@ https://rickai.github.io/animax-previewer/
 - The official AnimaX web previewer is coming soon.
 - The bundled samples are public-safe fixtures, not private production assets.
 - The runtime packages are alpha packages and may change before the official release.
+
+## Cloudflare deployment
+
+The standalone UI is adapted from the September 2026 kal previewer. It uses
+**Workers Static Assets + Workers API + D1 + R2** in one deployment. Workers
+serves the Vite build as well as `/api/*`; a separate Pages project and mail
+service are unnecessary. All three public AnimaX packages remain version-aligned.
+The internal CDN, internal fonts, AI assistant and private performance-check
+backend are not included. Optional browser video processing uses the pinned
+public FFmpeg 0.12.9 core from unpkg on demand.
+
+- D1 `animax-previewer`: file metadata, per-browser owner hashes and upload quotas.
+- R2 `animax-previewer`: animation files, images, videos and fonts.
+- JSON/ZIP/directory uploads reuse kal's resource rewriting flow. ZIPs are expanded
+  in the browser; resources are uploaded first and their URLs written into JSON.
+- Uploaded files are accessible to anyone holding their unpredictable URL. There
+  is no public file index. Do not upload confidential content.
+- Records belong to a random HttpOnly browser cookie, not a user account. Clearing
+  cookies loses access to that list; saved share links continue working. Hiding a
+  record is reversible in D1 and does not delete the file or break its links.
+- Upload limits: 25 MiB/file, 200 MiB and 1,000 files/IP/day, 8 GiB lifetime
+  storage reservation and 100,000 files for this app. Failed writes can consume
+  reservation, conservatively. These are application limits, **not a Cloudflare
+  billing cap**; read requests and other account usage can still incur charges.
+
+In Cloudflare, connect `RickAi/animax-previewer`, use `npm run build` as the build
+command and `npm run deploy` as the deploy command. Disable preview builds so
+unreviewed branches cannot modify the production database. The deploy script
+applies idempotent D1 migrations before deploying. Create the named R2 bucket
+first. The non-secret D1 identifier is checked into `wrangler.jsonc`.
+
+Local full-stack validation:
+
+```sh
+npm ci
+npm run build
+npm test
+npx wrangler d1 migrations apply DB --local
+npx wrangler dev --port 8795 --inspector-port 9395
+```
+
+`npm run dev` alone only serves the frontend. Cloud uploads require the Worker.
+Existing GitHub Pages deployment remains a static preview; use the Cloudflare
+site for persistent uploads.

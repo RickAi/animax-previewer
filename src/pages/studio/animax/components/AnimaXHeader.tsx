@@ -1,28 +1,38 @@
 import React from 'react';
+import { useAppPreferences } from '../../../../contexts/AppPreferencesContext';
 import { useAnimaX } from './AnimaXContext';
 
-export const AnimaXHeader: React.FC = () => {
-  const [pickerOpen, setPickerOpen] = React.useState(false);
-  const pickerRef = React.useRef<HTMLDivElement>(null);
+interface AnimaXHeaderProps {
+  layout?: 'full' | 'card';
+}
+
+export const AnimaXHeader: React.FC<AnimaXHeaderProps> = ({ layout = 'full' }) => {
+  const { t } = useAppPreferences();
+  const isCardLayout = layout === 'card';
+  const [uploadElapsedMs, setUploadElapsedMs] = React.useState(0);
   const {
     filePickerRef,
     uploadFilePickerRef,
     replacementPickerRef,
-    handlePickDirectory,
-    handlePickFiles,
+    handleOpenUploadDialog,
+    handleOpenPackageRecords,
+    handleOpenRepackDialog,
+    canRepack,
+    handleSelectUploadDirectory,
+    handleSelectUploadFiles,
     handleReplacementFile,
     srcInput,
     setSrcInput,
     handleConfirm,
     canConfirm,
+    handleDownloadInputLottie,
+    isDownloadingLottie,
     handleLoadRandomLottie,
     canRandomLottie,
     isRandomLottieLoading,
     randomLottieCount,
-    handleRepack,
-    canRepack,
-    isRepacking,
     handleCopyShareLink,
+    handleCopyCardShareLink,
     canShareSrc,
     directoryUploadProgress,
     isDirectoryUploading,
@@ -38,64 +48,47 @@ export const AnimaXHeader: React.FC = () => {
         ),
       )
     : 0;
+  const shouldShowUploadElapsed =
+    Boolean(directoryUploadProgress?.startedAt) &&
+    (directoryUploadProgress?.phase === 'uploading' || directoryUploadProgress?.phase === 'json');
 
   React.useEffect(() => {
-    if (!pickerOpen) return;
+    if (!shouldShowUploadElapsed || !directoryUploadProgress?.startedAt) {
+      setUploadElapsedMs(0);
+      return undefined;
+    }
 
-    const handlePointerDown = (event: PointerEvent) => {
-      if (pickerRef.current?.contains(event.target as Node)) return;
-      setPickerOpen(false);
+    const update = () => {
+      setUploadElapsedMs(Math.max(0, performance.now() - directoryUploadProgress.startedAt!));
     };
+    update();
+    const timer = window.setInterval(update, 500);
+    return () => window.clearInterval(timer);
+  }, [directoryUploadProgress?.startedAt, shouldShowUploadElapsed]);
 
-    document.addEventListener('pointerdown', handlePointerDown);
-    return () => document.removeEventListener('pointerdown', handlePointerDown);
-  }, [pickerOpen]);
+  const uploadElapsedLabel =
+    uploadElapsedMs >= 1000
+      ? `${Math.floor(uploadElapsedMs / 1000)}s`
+      : `${Math.round(uploadElapsedMs)}ms`;
 
   return (
     <header className="animax-topbar">
       <div className="animax-row">
         <div className="animax-group animax-topbar-controls">
-          <div className="animax-file-picker" ref={pickerRef}>
+          {isCardLayout ? null : (
             <button
               type="button"
               className="animax-btn topbar-action file-action"
               disabled={isDirectoryUploading}
-              title="支持目录、纯 .json 和 .zip 的加载；识别到 Alpha ZIP 时会提示转换；含本地资源的 JSON 请选目录"
-              aria-haspopup="menu"
-              aria-expanded={pickerOpen}
-              onClick={() => {
-                setPickerOpen((open) => !open);
-              }}
+              onClick={handleOpenUploadDialog}
             >
-              {isDirectoryUploading ? '上传中...' : '选择文件'}
+              {isDirectoryUploading ? t('animax.header.uploading') : t('animax.header.chooseFile')}
             </button>
-            {pickerOpen ? (
-              <div className="animax-file-picker-menu" role="menu">
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    setPickerOpen(false);
-                    filePickerRef.current?.click();
-                  }}
-                >
-                  <strong>选择目录</strong>
-                  <span>递归上传目录中的 JSON 和资源</span>
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    setPickerOpen(false);
-                    uploadFilePickerRef.current?.click();
-                  }}
-                >
-                  <strong>选择纯 JSON / ZIP</strong>
-                  <span>Alpha ZIP 会先提示转换，含本地资源的 JSON 请用目录加载</span>
-                </button>
-              </div>
-            ) : null}
-          </div>
+          )}
+          {isCardLayout ? null : <>
+            <button type="button" className="animax-btn topbar-action" onClick={handleOpenPackageRecords}>云端记录</button>
+            <button type="button" className="animax-btn topbar-action" disabled={!canRepack || isDirectoryUploading} onClick={handleOpenRepackDialog}>重打包</button>
+          </>}
           <input
             ref={filePickerRef}
             type="file"
@@ -105,9 +98,7 @@ export const AnimaXHeader: React.FC = () => {
             onChange={(e) => {
               const files = Array.from(e.target.files ?? []);
               if (files.length === 0) return;
-              handlePickDirectory(files).catch((error) => {
-                console.error('[animax] 目录上传失败', error);
-              });
+              handleSelectUploadDirectory(files);
               e.currentTarget.value = '';
             }}
           />
@@ -120,9 +111,7 @@ export const AnimaXHeader: React.FC = () => {
             onChange={(e) => {
               const files = Array.from(e.target.files ?? []);
               if (files.length === 0) return;
-              handlePickFiles(files).catch((error) => {
-                console.error('[animax] 文件加载失败', error);
-              });
+              handleSelectUploadFiles(files);
               e.currentTarget.value = '';
             }}
           />
@@ -139,80 +128,140 @@ export const AnimaXHeader: React.FC = () => {
               });
             }}
           />
-          <button
-            type="button"
-            className="animax-btn topbar-action random-action"
-            onClick={() => {
-              handleLoadRandomLottie().catch((error) => {
-                console.error('[animax] 随机 Lottie 加载失败', error);
-              });
-            }}
-            disabled={!canRandomLottie}
-            title={
-              randomLottieCount > 0
-                ? `从 ${randomLottieCount} 个 Lottie 中随机加载一个`
-                : '请先配置 Lottie 资源库'
-            }
-          >
-            {isRandomLottieLoading ? '随机中...' : '随机示例'}
-          </button>
+          {isCardLayout ? null : (
+            <button
+              type="button"
+              className="animax-btn topbar-action random-action"
+              onClick={() => {
+                handleLoadRandomLottie().catch((error) => {
+                  console.error('[animax] 随机 Lottie 加载失败', error);
+                });
+              }}
+              disabled={!canRandomLottie}
+              title={
+                randomLottieCount > 0
+                  ? t('animax.header.randomTitleWithCount', { count: randomLottieCount })
+                  : t('animax.header.randomTitleEmpty')
+              }
+            >
+              {isRandomLottieLoading
+                ? t('animax.header.randomLoading')
+                : t('animax.header.randomExample')}
+            </button>
+          )}
           <div className="animax-input animax-url-input">
-            <label>链接</label>
+            <label>{t('animax.header.urlLabel')}</label>
             <input
               value={srcInput}
               onChange={(e) => setSrcInput(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') handleConfirm();
               }}
-              placeholder="https://example.com/anim.json 或 https://example.com/bundle.zip"
+              placeholder={t('animax.header.urlPlaceholder')}
             />
           </div>
+          {isCardLayout ? null : (
+            <button
+              type="button"
+              className="animax-btn topbar-action load-action"
+              onClick={handleConfirm}
+              disabled={!canConfirm || isDirectoryUploading}
+            >
+              {t('animax.header.load')}
+            </button>
+          )}
           <button
             type="button"
-            className="animax-btn topbar-action load-action"
-            onClick={handleConfirm}
-            disabled={!canConfirm || isDirectoryUploading}
-          >
-            加载
-          </button>
-          <button
-            type="button"
-            className="animax-btn topbar-action repack-action"
+            className="animax-btn topbar-action download-action iconBtn"
             onClick={() => {
-              handleRepack().catch((error) => {
-                console.error('[animax] 重打包失败', error);
+              handleDownloadInputLottie().catch((error) => {
+                console.error('[animax] Lottie 下载失败', error);
               });
             }}
-            disabled={!canRepack || isDirectoryUploading}
-          >
-            {isRepacking ? '重打包中...' : '重打包'}
-          </button>
-          <button
-            type="button"
-            className="animax-btn topbar-action share-action"
-            onClick={() => {
-              handleCopyShareLink().catch((error) => {
-                console.error('[animax] 分享链接复制失败', error);
-              });
-            }}
-            disabled={!canShareSrc}
-            title={canShareSrc ? '复制当前动画的分享链接' : '当前动画没有可分享链接'}
-            aria-label="复制分享链接"
+            disabled={!canConfirm || isDirectoryUploading || isDownloadingLottie}
+            data-tooltip={t('animax.header.downloadTitle')}
+            aria-label={t('animax.header.downloadTitle')}
           >
             <span className="animax-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" width="18" height="18" fill="none">
+              <svg viewBox="0 0 24 24" width="17" height="17" fill="none">
                 <path
-                  d="M8.8 12.7L15.2 16.4M15.2 7.6L8.8 11.3"
+                  d="M12 4.5v10M7.8 10.8 12 15l4.2-4.2M5 18.5h14"
                   stroke="currentColor"
-                  strokeWidth="1.8"
+                  strokeWidth="1.9"
                   strokeLinecap="round"
+                  strokeLinejoin="round"
                 />
-                <circle cx="6.5" cy="12" r="2.4" stroke="currentColor" strokeWidth="1.8" />
-                <circle cx="17.5" cy="6.3" r="2.4" stroke="currentColor" strokeWidth="1.8" />
-                <circle cx="17.5" cy="17.7" r="2.4" stroke="currentColor" strokeWidth="1.8" />
               </svg>
             </span>
           </button>
+          {isCardLayout ? null : (
+            <>
+              <button
+                type="button"
+                className="animax-btn topbar-action share-action iconBtn"
+                onClick={() => {
+                  handleCopyShareLink().catch((error) => {
+                    console.error('[animax] 分享链接复制失败', error);
+                  });
+                }}
+                disabled={!canShareSrc}
+                data-tooltip={
+                  canShareSrc ? t('animax.header.copyShare') : t('animax.header.copyShareDisabled')
+                }
+                aria-label={t('animax.header.copyShareAria')}
+              >
+                <span className="animax-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none">
+                    <path
+                      d="M8.8 12.7L15.2 16.4M15.2 7.6L8.8 11.3"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                    />
+                    <circle cx="6.5" cy="12" r="2.4" stroke="currentColor" strokeWidth="1.8" />
+                    <circle cx="17.5" cy="6.3" r="2.4" stroke="currentColor" strokeWidth="1.8" />
+                    <circle cx="17.5" cy="17.7" r="2.4" stroke="currentColor" strokeWidth="1.8" />
+                  </svg>
+                </span>
+              </button>
+              <button
+                type="button"
+                className="animax-btn topbar-action card-share-action iconBtn"
+                onClick={() => {
+                  handleCopyCardShareLink().catch((error) => {
+                    console.error('[animax] 飞书卡片链接复制失败', error);
+                  });
+                }}
+                disabled={!canShareSrc}
+                data-tooltip={
+                  canShareSrc
+                    ? t('animax.header.copyCardShare')
+                    : t('animax.header.copyShareDisabled')
+                }
+                aria-label={t('animax.header.copyCardShareAria')}
+              >
+                <span className="animax-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none">
+                    <rect
+                      x="4.5"
+                      y="5.5"
+                      width="15"
+                      height="13"
+                      rx="2.2"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                    />
+                    <path
+                      d="M8 9h8M8 12.3h5.2M8 15.5h7"
+                      stroke="currentColor"
+                      strokeWidth="1.6"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                </span>
+              </button>
+            </>
+          )}
         </div>
       </div>
       {directoryUploadProgress ? (
@@ -231,6 +280,9 @@ export const AnimaXHeader: React.FC = () => {
           <div className="animax-upload-progress-detail">
             <span>{directoryUploadProgress.detail}</span>
             <span>
+              {shouldShowUploadElapsed
+                ? `${t('animax.header.uploadWaited', { time: uploadElapsedLabel })} · `
+                : ''}
               {directoryUploadProgress.completed} / {directoryUploadProgress.total}
             </span>
           </div>

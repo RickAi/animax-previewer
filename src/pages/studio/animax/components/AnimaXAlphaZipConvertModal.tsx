@@ -12,6 +12,8 @@ export const AnimaXAlphaZipConvertModal: React.FC = () => {
   const open = Boolean(pendingAlphaZipInfo);
   if (!pendingAlphaZipInfo) return null;
 
+  const compressionSupported = pendingAlphaZipInfo.compression.supported;
+
   return (
     <div
       className={open ? 'animax-overlay show' : 'animax-overlay'}
@@ -44,8 +46,8 @@ export const AnimaXAlphaZipConvertModal: React.FC = () => {
           <div className="animax-section">
             <h3>{pendingAlphaZipName}</h3>
             <div className="subline" style={{ marginTop: 8 }}>
-              检测到当前 ZIP 是 AlphaPlayer 资源包，Web 预览暂不直接支持，建议先转换成
-              animaxLottie 再加载。
+              检测到当前 ZIP 是 AlphaPlayer 资源包，Web 预览暂不直接支持，建议先转换成 animaxLottie
+              再加载。
             </div>
           </div>
           <div className="animax-section">
@@ -53,9 +55,20 @@ export const AnimaXAlphaZipConvertModal: React.FC = () => {
             <div className="subline" style={{ marginTop: 8 }}>
               场景：{pendingAlphaZipInfo.sceneName}
             </div>
-            <div className="subline">尺寸：{pendingAlphaZipInfo.width} x {pendingAlphaZipInfo.height}</div>
+            <div className="subline">
+              尺寸：{pendingAlphaZipInfo.width} x {pendingAlphaZipInfo.height}
+            </div>
             <div className="subline">总帧数：{pendingAlphaZipInfo.totalFrames}</div>
             <div className="subline">视频文件：{pendingAlphaZipInfo.sourceVideoPath}</div>
+            <div className="subline">
+              压缩算法：{pendingAlphaZipInfo.compression.algorithms.join(', ')}
+              {compressionSupported ? '（支持）' : '（不支持）'}
+            </div>
+            {!compressionSupported ? (
+              <div className="subline" style={{ color: 'var(--animax-danger)', marginTop: 8 }}>
+                该压缩算法在 harmony、windows、mac 上不支持，可以使用重打包功能重新生成 ZIP 文件。
+              </div>
+            ) : null}
           </div>
         </div>
         <div className="animax-modal-foot">

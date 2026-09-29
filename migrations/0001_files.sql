@@ -1,0 +1,11 @@
+CREATE TABLE IF NOT EXISTS files (
+  id TEXT PRIMARY KEY,
+  owner TEXT NOT NULL,
+  name TEXT NOT NULL,
+  size INTEGER NOT NULL,
+  content_type TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  hidden INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS files_owner_created ON files(owner, created_at DESC);
+CREATE TABLE IF NOT EXISTS quotas (id TEXT PRIMARY KEY, bytes INTEGER NOT NULL, count INTEGER NOT NULL);

@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+import worker, { validateFile } from '../worker/index.js';
+assert.equal(validateFile(new File(['{}'], 'animation.json')), 'application/json');
+for (const name of ['x.html', '../x.json', 'x.svg']) assert.throws(() => validateFile(new File(['x'], name)));
+assert.throws(() => validateFile(new File([], 'empty.json')));
+assert.throws(() => validateFile(new File([new Uint8Array(25 * 1024 * 1024 + 1)], 'large.zip')));
+const session = await worker.fetch(new Request('https://example.com/api/session'), {});
+assert.match(session.headers.get('Set-Cookie'), /HttpOnly; SameSite=Strict;.*Secure/);
+const denied = await worker.fetch(new Request('https://example.com/api/files', { method: 'POST', headers: { Cookie: 'animax_session=' + 'a'.repeat(64), Origin: 'https://evil.example' } }), { DB: {}, FILES: {} });
+assert.equal(denied.status, 403);
+const anonymous = await worker.fetch(new Request('https://example.com/api/files'), { DB: {}, FILES: {} });
+assert.equal(anonymous.status, 401);
+console.log('Storage validation, session and cross-origin checks passed');

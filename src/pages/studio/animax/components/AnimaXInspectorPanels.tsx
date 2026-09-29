@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { useAppPreferences } from '../../../../contexts/AppPreferencesContext';
 import type {
   AssetRow,
   CreateEditableLayerInput,
@@ -10,8 +11,14 @@ import type {
   LayerTransform,
   LayerTransformStaticState,
   PreviewEditableLayerOptions,
+  ProcessedVideoResource,
   TextLayerRow,
+  VideoIframeMode,
+  VideoProcessOptions,
+  VideoProcessProgress,
+  VideoResourceInfo,
 } from '../toolTypes';
+import { getFixableIssueCount } from '../services/resourceCheck';
 import { AnimaXJsonCodeEditor } from './AnimaXJsonCodeEditor';
 
 const getResourceKindLabel = (kind: AssetRow['kind']) => {
@@ -34,6 +41,13 @@ const getResourceUrlPlaceholder = (kind: AssetRow['kind']) => {
   if (kind === 'image') return 'https://example.com/image.png';
   if (kind === 'video') return 'https://example.com/video.mp4';
   return 'https://example.com/font.ttf';
+};
+
+const formatFileSize = (bytes?: number) => {
+  if (!Number.isFinite(bytes)) return '--';
+  const value = bytes as number;
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)}KB`;
+  return `${(value / 1024 / 1024).toFixed(2)}MB`;
 };
 
 const getFontOriginHint = (origin?: number) => {
@@ -246,6 +260,8 @@ const ADD_LAYER_SWATCHES = [
   '#ff6b9a',
   '#14b8a6',
 ];
+const INITIAL_LAYER_RENDER_COUNT = 80;
+const LAYER_RENDER_INCREMENT = 80;
 
 const getDefaultLayerName = (kind: EditableLayerKind) => {
   if (kind === 'image') return 'Image Layer';
@@ -1178,10 +1194,12 @@ export const AnimaXLayersPanel: React.FC<LayersPanelProps> = ({
   onCancelLayerVisibilityPreview,
   onApplyLayerEdit,
 }) => {
+  const { t } = useAppPreferences();
   const [layerSearchText, setLayerSearchText] = useState('');
   const [addLayerOpen, setAddLayerOpen] = useState(false);
   const [editingLayerKey, setEditingLayerKey] = useState('');
   const [closingSheet, setClosingSheet] = useState<'add' | 'edit' | ''>('');
+  const [visibleLayerLimit, setVisibleLayerLimit] = useState(INITIAL_LAYER_RENDER_COUNT);
   const activeLayerBoundsKeySet = useMemo(
     () => new Set(activeLayerBoundsKeys),
     [activeLayerBoundsKeys],
@@ -1198,6 +1216,8 @@ export const AnimaXLayersPanel: React.FC<LayersPanelProps> = ({
     );
   }, [layerRows, normalizedLayerSearchText]);
   const visibleLayerRows = normalizedLayerSearchText ? matchedLayerRows : layerRows;
+  const renderedLayerRows = visibleLayerRows.slice(0, visibleLayerLimit);
+  const hiddenLayerRowCount = Math.max(0, visibleLayerRows.length - renderedLayerRows.length);
   const editingLayer = useMemo(
     () => layerRows.find((row) => row.key === editingLayerKey) ?? null,
     [editingLayerKey, layerRows],
@@ -1205,7 +1225,12 @@ export const AnimaXLayersPanel: React.FC<LayersPanelProps> = ({
 
   useEffect(() => {
     setLayerSearchText('');
+    setVisibleLayerLimit(INITIAL_LAYER_RENDER_COUNT);
   }, [layerRows]);
+
+  useEffect(() => {
+    setVisibleLayerLimit(INITIAL_LAYER_RENDER_COUNT);
+  }, [normalizedLayerSearchText]);
 
   useEffect(() => {
     if (editingLayerKey && !editingLayer) setEditingLayerKey('');
@@ -1264,11 +1289,11 @@ export const AnimaXLayersPanel: React.FC<LayersPanelProps> = ({
               <span className="animax-editor-layer-bounds-icon" aria-hidden="true">
                 +
               </span>
-              <span>新增图层</span>
+              <span>{t('animax.layers.addLayer')}</span>
             </button>
           </div>
           <div className="animax-editor-resource-list">
-            {visibleLayerRows.map((row) => {
+            {renderedLayerRows.map((row) => {
               const active = activeLayerBoundsKeySet.has(row.key);
               const activeColor = layerBoundsColorMap.get(row.key);
               const detailTitle = getLayerDetailTitle(row);
@@ -1428,7 +1453,9 @@ export const AnimaXLayersPanel: React.FC<LayersPanelProps> = ({
                             : 'animax-editor-layer-bounds-toggle'
                         }
                         aria-pressed={active}
-                        title={active ? '取消图层定位' : '显示图层定位'}
+                        title={
+                          active ? t('animax.layers.hideBounds') : t('animax.layers.showBounds')
+                        }
                         onClick={(event) => {
                           event.stopPropagation();
                           onToggleBounds(row);
@@ -1454,14 +1481,16 @@ export const AnimaXLayersPanel: React.FC<LayersPanelProps> = ({
                             <circle cx="12" cy="12" r="1.7" fill="currentColor" />
                           </svg>
                         </span>
-                        <span>{active ? '已定位' : '定位'}</span>
+                        <span>
+                          {active ? t('animax.layers.located') : t('animax.layers.locate')}
+                        </span>
                       </button>
                     ) : null}
                     <button
                       type="button"
                       className="animax-layer-icon-btn animax-layer-edit-entry"
-                      title="编辑图层"
-                      aria-label={`编辑图层 ${row.name}`}
+                      title={t('animax.layers.editLayer')}
+                      aria-label={t('animax.layers.editAria', { name: row.name })}
                       onClick={(event) => {
                         event.stopPropagation();
                         onSelectLayer(row);
@@ -1492,8 +1521,17 @@ export const AnimaXLayersPanel: React.FC<LayersPanelProps> = ({
             })}
             {visibleLayerRows.length === 0 ? (
               <div className="animax-editor-empty-list">
-                {normalizedLayerSearchText ? '没有匹配的图层。' : '未解析到图层。'}
+                {normalizedLayerSearchText ? t('animax.layers.noMatch') : t('animax.layers.empty')}
               </div>
+            ) : null}
+            {hiddenLayerRowCount > 0 ? (
+              <button
+                type="button"
+                className="animax-editor-list-more"
+                onClick={() => setVisibleLayerLimit((count) => count + LAYER_RENDER_INCREMENT)}
+              >
+                {t('animax.layers.showMore', { count: hiddenLayerRowCount })}
+              </button>
             ) : null}
           </div>
           <div className="animax-editor-layer-search">
@@ -1503,7 +1541,7 @@ export const AnimaXLayersPanel: React.FC<LayersPanelProps> = ({
                 value={layerSearchText}
                 onChange={handleLayerSearchChange}
                 onKeyDown={handleLayerSearchKeyDown}
-                placeholder="搜索图层名"
+                placeholder={t('animax.layers.searchPlaceholder')}
                 spellCheck={false}
               />
               {layerSearchText ? (
@@ -1511,7 +1549,7 @@ export const AnimaXLayersPanel: React.FC<LayersPanelProps> = ({
                   type="button"
                   className="animax-editor-layer-search-clear"
                   onClick={() => setLayerSearchText('')}
-                  aria-label="清空图层搜索"
+                  aria-label={t('animax.layers.clearSearch')}
                 >
                   ×
                 </button>
@@ -1519,13 +1557,16 @@ export const AnimaXLayersPanel: React.FC<LayersPanelProps> = ({
             </div>
             <div className="animax-editor-layer-search-status">
               {normalizedLayerSearchText
-                ? `${visibleLayerRows.length} / ${layerRows.length} 个图层`
-                : `${layerRows.length} 个图层`}
+                ? t('animax.layers.filteredCount', {
+                    visible: visibleLayerRows.length,
+                    total: layerRows.length,
+                  })
+                : t('animax.layers.count', { count: layerRows.length })}
             </div>
           </div>
           {addLayerOpen ? (
             <LayerBottomSheet
-              title="新增图层"
+              title={t('animax.layers.addLayer')}
               variant="add"
               closing={closingSheet === 'add'}
               onRequestClose={requestCloseAddLayerSheet}
@@ -1541,7 +1582,7 @@ export const AnimaXLayersPanel: React.FC<LayersPanelProps> = ({
           ) : null}
           {editingLayer ? (
             <LayerBottomSheet
-              title="编辑图层"
+              title={t('animax.layers.editLayer')}
               subtitle={`${editingLayer.typeLabel} · #${editingLayer.index}`}
               variant="edit"
               closing={closingSheet === 'edit'}
@@ -1570,13 +1611,392 @@ interface AssetsPanelProps {
   onReplace: (row: AssetRow) => void;
   onReplaceUrl: (row: AssetRow, rawUrl: string) => Promise<void>;
   onReplaceFontStyle: (row: AssetRow, nextStyle: string) => Promise<void>;
+  onProcessVideo: (
+    row: AssetRow,
+    options: VideoProcessOptions,
+    onProgress?: (progress: VideoProcessProgress) => void,
+  ) => Promise<ProcessedVideoResource>;
+  onProbeVideo: (
+    row: AssetRow,
+    onProgress?: (progress: VideoProcessProgress) => void,
+  ) => Promise<VideoResourceInfo>;
+  onApplyProcessedVideo: (row: AssetRow, processed: ProcessedVideoResource) => Promise<void>;
+  onFixResource: (row: AssetRow) => Promise<void>;
+  onFixAllResources: () => Promise<void>;
+  isFixingResources: boolean;
 }
+
+interface VideoProcessDialogProps {
+  row: AssetRow;
+  onClose: () => void;
+  onProcess: (
+    row: AssetRow,
+    options: VideoProcessOptions,
+    onProgress?: (progress: VideoProcessProgress) => void,
+  ) => Promise<ProcessedVideoResource>;
+  onProbe: (
+    row: AssetRow,
+    onProgress?: (progress: VideoProcessProgress) => void,
+  ) => Promise<VideoResourceInfo>;
+  onApply: (row: AssetRow, processed: ProcessedVideoResource) => Promise<void>;
+}
+
+const downloadProcessedVideo = (processed: ProcessedVideoResource) => {
+  const link = document.createElement('a');
+  link.href = processed.blobUrl;
+  link.download = processed.fileName;
+  link.click();
+};
+
+const formatVideoFrameCount = (videoInfo: VideoResourceInfo | null, loading: boolean) => {
+  if (loading) return '读取中';
+  if (!videoInfo?.totalFrames) return '--';
+  return `${videoInfo.totalFramesEstimated ? '约 ' : ''}${videoInfo.totalFrames} 帧`;
+};
+
+const formatVideoFrameRate = (videoInfo: VideoResourceInfo | null) => {
+  if (!videoInfo?.frameRate) return '--';
+  return `${Number(videoInfo.frameRate.toFixed(3))} fps`;
+};
+
+const shouldProbeVideoInfo = (iframeMode: VideoIframeMode) => iframeMode === 'frameNumbers';
+
+const VideoProcessDialog: React.FC<VideoProcessDialogProps> = ({
+  row,
+  onClose,
+  onProcess,
+  onProbe,
+  onApply,
+}) => {
+  const [iframeMode, setIframeMode] = useState<VideoIframeMode>('frames');
+  const [iframeIntervalFrames, setIframeIntervalFrames] = useState(30);
+  const [iframeIntervalSeconds, setIframeIntervalSeconds] = useState(1);
+  const [iframeFrameNumbers, setIframeFrameNumbers] = useState('0, 30, 60');
+  const [videoInfo, setVideoInfo] = useState<VideoResourceInfo | null>(null);
+  const [videoInfoLoading, setVideoInfoLoading] = useState(false);
+  const [videoInfoError, setVideoInfoError] = useState('');
+  const [phase, setPhase] = useState<'config' | 'processing' | 'success' | 'error' | 'applying'>(
+    'config',
+  );
+  const [error, setError] = useState('');
+  const [processed, setProcessed] = useState<ProcessedVideoResource | null>(null);
+  const [processingMessage, setProcessingMessage] = useState('');
+  const [processingProgress, setProcessingProgress] = useState(0);
+  const [processingLog, setProcessingLog] = useState('');
+  const appliedBlobUrlRef = useRef('');
+
+  useEffect(() => {
+    return () => {
+      if (processed && appliedBlobUrlRef.current !== processed.blobUrl) {
+        URL.revokeObjectURL(processed.blobUrl);
+      }
+    };
+  }, [processed]);
+
+  useEffect(() => {
+    setVideoInfo(null);
+    setVideoInfoError('');
+    setVideoInfoLoading(false);
+  }, [row]);
+
+  useEffect(() => {
+    if (!shouldProbeVideoInfo(iframeMode) || videoInfo || videoInfoLoading) return;
+    let cancelled = false;
+    setVideoInfoError('');
+    setVideoInfoLoading(true);
+    onProbe(row)
+      .then((info) => {
+        if (cancelled) return;
+        setVideoInfo(info);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setVideoInfoError(err instanceof Error ? err.message : String(err));
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setVideoInfoLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [iframeMode, onProbe, row, videoInfo, videoInfoLoading]);
+
+  const canSubmit = phase === 'config' || phase === 'error';
+
+  const startProcess = async () => {
+    if (!canSubmit) return;
+    setPhase('processing');
+    setError('');
+    setProcessingMessage('准备启动本地 ffmpeg');
+    setProcessingProgress(0);
+    setProcessingLog('');
+    try {
+      const result = await onProcess(
+        row,
+        {
+          iframeMode,
+          iframeIntervalFrames: iframeMode === 'frames' ? iframeIntervalFrames : undefined,
+          iframeIntervalSeconds: iframeMode === 'seconds' ? iframeIntervalSeconds : undefined,
+          iframeFrameNumbers: iframeMode === 'frameNumbers' ? iframeFrameNumbers : undefined,
+        },
+        (progress) => {
+          setProcessingMessage(progress.message);
+          if (typeof progress.progress === 'number') {
+            setProcessingProgress(progress.progress);
+          }
+          if (progress.log) {
+            setProcessingLog(progress.log);
+          }
+        },
+      );
+      setProcessed((previous) => {
+        if (previous) URL.revokeObjectURL(previous.blobUrl);
+        return result;
+      });
+      setPhase('success');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setPhase('error');
+    }
+  };
+
+  const applyProcessed = async () => {
+    if (!processed || phase === 'applying') return;
+    setPhase('applying');
+    setError('');
+    try {
+      await onApply(row, processed);
+      appliedBlobUrlRef.current = processed.blobUrl;
+      setProcessed(null);
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setPhase('success');
+    }
+  };
+
+  return (
+    <div
+      className="animax-overlay show"
+      role="dialog"
+      aria-modal="true"
+      onClick={(event) => {
+        if (
+          event.currentTarget === event.target &&
+          phase !== 'processing' &&
+          phase !== 'applying'
+        ) {
+          onClose();
+        }
+      }}
+    >
+      <div className="animax-modal animax-video-process-modal">
+        <div className="animax-modal-head">
+          <div className="t">插入 I 帧</div>
+          <button
+            type="button"
+            className="animax-btn iconBtn ghost"
+            onClick={onClose}
+            disabled={phase === 'processing' || phase === 'applying'}
+            aria-label="关闭"
+          >
+            <span className="animax-icon">
+              <svg viewBox="0 0 24 24" width="18" height="18">
+                <path
+                  d="M18 6L6 18M6 6l12 12"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </span>
+          </button>
+        </div>
+
+        <div className="animax-modal-body">
+          <div className="animax-section">
+            <h3>当前视频</h3>
+            <div className="animax-video-process-meta">
+              <span>资源 ID</span>
+              <strong>{row.id}</strong>
+              <span>文件</span>
+              <strong>{row.name}</strong>
+              <span>大小</span>
+              <strong>{formatFileSize(row.sizeBytes)}</strong>
+              <span>来源</span>
+              <strong title={row.previewUrl}>{row.previewUrl ? '可读取' : '缺失'}</strong>
+              <span>总帧数</span>
+              <strong title={videoInfoError || undefined}>
+                {videoInfoError
+                  ? '读取失败'
+                  : shouldProbeVideoInfo(iframeMode)
+                    ? formatVideoFrameCount(videoInfo, videoInfoLoading)
+                    : '选择指定帧后读取'}
+              </strong>
+              <span>帧率</span>
+              <strong>{formatVideoFrameRate(videoInfo)}</strong>
+            </div>
+          </div>
+
+          {phase === 'config' || phase === 'error' ? (
+            <div className="animax-section">
+              <h3>输出设置</h3>
+              <label className="animax-video-process-field">
+                <span>I 帧插入方式</span>
+                <select
+                  value={iframeMode}
+                  onChange={(event) => setIframeMode(event.currentTarget.value as VideoIframeMode)}
+                >
+                  <option value="frames">每 N 帧</option>
+                  <option value="seconds">每 N 秒</option>
+                  <option value="frameNumbers">指定帧</option>
+                </select>
+              </label>
+              {iframeMode === 'frames' ? (
+                <label className="animax-video-process-field">
+                  <span>每 N 帧插入一个 I 帧</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={9999}
+                    value={iframeIntervalFrames}
+                    onChange={(event) => {
+                      const value = Number(event.currentTarget.value);
+                      setIframeIntervalFrames(Number.isFinite(value) ? Math.max(1, value) : 30);
+                    }}
+                  />
+                </label>
+              ) : null}
+              {iframeMode === 'seconds' ? (
+                <label className="animax-video-process-field">
+                  <span>每 N 秒插入一个 I 帧</span>
+                  <input
+                    type="number"
+                    min={0.01}
+                    step={0.01}
+                    value={iframeIntervalSeconds}
+                    onChange={(event) => {
+                      const value = Number(event.currentTarget.value);
+                      setIframeIntervalSeconds(Number.isFinite(value) ? Math.max(0.01, value) : 1);
+                    }}
+                  />
+                </label>
+              ) : null}
+              {iframeMode === 'frameNumbers' ? (
+                <label className="animax-video-process-field">
+                  <span>指定 I 帧帧号（从 0 开始）</span>
+                  <input
+                    type="text"
+                    value={iframeFrameNumbers}
+                    placeholder="例如：0, 30, 60"
+                    onChange={(event) => setIframeFrameNumbers(event.currentTarget.value)}
+                  />
+                </label>
+              ) : null}
+              {error ? <div className="animax-video-process-error">{error}</div> : null}
+            </div>
+          ) : null}
+
+          {phase === 'processing' || phase === 'applying' ? (
+            <div className="animax-section">
+              <h3>{phase === 'processing' ? '处理中' : '正在替换'}</h3>
+              <div className="animax-video-process-progress">
+                <div className="animax-video-process-spinner" />
+                <span>
+                  {phase === 'processing'
+                    ? processingMessage || '正在本地执行 ffmpeg'
+                    : '正在写入本地预览并刷新播放器'}
+                </span>
+              </div>
+              {phase === 'processing' ? (
+                <>
+                  <div className="animax-video-process-track" aria-label="处理进度">
+                    <div
+                      className="animax-video-process-bar"
+                      style={{
+                        width: `${Math.round(Math.max(0, Math.min(1, processingProgress)) * 100)}%`,
+                      }}
+                    />
+                  </div>
+                  <div className="animax-video-process-note">
+                    本地会重新编码视频并写入新的 I 帧分布，较大的视频可能需要较长时间。
+                  </div>
+                  {processingLog ? (
+                    <div className="animax-video-process-log" title={processingLog}>
+                      {processingLog}
+                    </div>
+                  ) : null}
+                </>
+              ) : null}
+            </div>
+          ) : null}
+
+          {phase === 'success' && processed ? (
+            <div className="animax-section">
+              <h3>I 帧插入完成</h3>
+              <div className="animax-video-process-meta">
+                <span>原始大小</span>
+                <strong>{formatFileSize(processed.originalSizeBytes)}</strong>
+                <span>输出大小</span>
+                <strong>{formatFileSize(processed.outputSizeBytes)}</strong>
+                <span>ZIP 路径</span>
+                <strong>{processed.packPath}</strong>
+              </div>
+              {error ? <div className="animax-video-process-error">{error}</div> : null}
+            </div>
+          ) : null}
+        </div>
+
+        <div className="animax-modal-foot">
+          <button
+            type="button"
+            className="animax-btn"
+            onClick={onClose}
+            disabled={phase === 'processing' || phase === 'applying'}
+          >
+            取消
+          </button>
+          {phase === 'success' && processed ? (
+            <button
+              type="button"
+              className="animax-btn"
+              onClick={() => downloadProcessedVideo(processed)}
+            >
+              下载视频
+            </button>
+          ) : null}
+          {phase === 'success' && processed ? (
+            <button type="button" className="animax-btn primary" onClick={applyProcessed}>
+              替换当前视频并刷新预览
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="animax-btn primary"
+              onClick={startProcess}
+              disabled={!canSubmit}
+            >
+              {phase === 'error' ? '重试' : '开始处理'}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
 
 export const AnimaXAssetsPanel: React.FC<AssetsPanelProps> = ({
   assetRows,
   onReplace,
   onReplaceUrl,
   onReplaceFontStyle,
+  onProcessVideo,
+  onProbeVideo,
+  onApplyProcessedVideo,
+  onFixResource,
+  onFixAllResources,
+  isFixingResources,
 }) => {
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
   const [previewVideoUrl, setPreviewVideoUrl] = useState<string | null>(null);
@@ -1590,6 +2010,10 @@ export const AnimaXAssetsPanel: React.FC<AssetsPanelProps> = ({
   const [styleReplacePending, setStyleReplacePending] = useState(false);
   const [replaceMenuKey, setReplaceMenuKey] = useState<string | null>(null);
   const [replaceMenuPlacement, setReplaceMenuPlacement] = useState<'top' | 'bottom'>('bottom');
+  const [videoProcessTarget, setVideoProcessTarget] = useState<AssetRow | null>(null);
+  const [fixingResourceKey, setFixingResourceKey] = useState<string | null>(null);
+  const [fixResourceError, setFixResourceError] = useState('');
+  const fixableResourceIssueCount = useMemo(() => getFixableIssueCount(assetRows), [assetRows]);
   const replaceMenuRef = useRef<HTMLDivElement>(null);
   const resourceKindSummary = useMemo(() => {
     const summary = assetRows.reduce(
@@ -1672,6 +2096,35 @@ export const AnimaXAssetsPanel: React.FC<AssetsPanelProps> = ({
     setStyleReplacePending(false);
   };
 
+  const openVideoProcess = (row: AssetRow) => {
+    setReplaceMenuKey(null);
+    setVideoProcessTarget(row);
+  };
+
+  const fixResource = async (row: AssetRow) => {
+    if (fixingResourceKey || isFixingResources) return;
+    const rowKey = getRowKey(row);
+    setFixResourceError('');
+    setFixingResourceKey(rowKey);
+    try {
+      await onFixResource(row);
+    } catch (err) {
+      setFixResourceError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setFixingResourceKey(null);
+    }
+  };
+
+  const fixAllResources = async () => {
+    if (isFixingResources || fixingResourceKey) return;
+    setFixResourceError('');
+    try {
+      await onFixAllResources();
+    } catch (err) {
+      setFixResourceError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
   const submitUrlReplace = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!urlReplaceRow || urlReplacePending) return;
@@ -1722,8 +2175,21 @@ export const AnimaXAssetsPanel: React.FC<AssetsPanelProps> = ({
                   <strong>{item.count}</strong>
                 </span>
               ))}
+              {fixableResourceIssueCount > 0 ? (
+                <button
+                  type="button"
+                  className="animax-editor-resource-fix-all"
+                  onClick={fixAllResources}
+                  disabled={isFixingResources || Boolean(fixingResourceKey)}
+                >
+                  {isFixingResources ? '修复中' : `一键修复 ${fixableResourceIssueCount} 项`}
+                </button>
+              ) : null}
             </div>
           )}
+          {fixResourceError ? (
+            <div className="animax-editor-resource-check-error">{fixResourceError}</div>
+          ) : null}
           <div className="animax-editor-resource-list">
             {assetRows.map((row) => {
               const rowKey = getRowKey(row);
@@ -1739,6 +2205,9 @@ export const AnimaXAssetsPanel: React.FC<AssetsPanelProps> = ({
                   ? '填写字体文件 URL，校验通过后替换当前字体'
                   : `填写线上${kindLabel}链接，校验通过后替换`;
               const menuOpen = replaceMenuKey === rowKey;
+              const hasIssues = (row.check?.issues.length ?? 0) > 0;
+              const fixableIssue = row.check?.issues.find((issue) => issue.fixable !== false);
+              const isFixingThis = fixingResourceKey === rowKey;
 
               return (
                 <div
@@ -1763,12 +2232,38 @@ export const AnimaXAssetsPanel: React.FC<AssetsPanelProps> = ({
                     ) : null}
                   </div>
                   <div className="animax-editor-resource-main">
-                    <div className="animax-editor-resource-title" title={row.name}>
-                      {row.name}
+                    <div className="animax-editor-resource-title-row">
+                      <div className="animax-editor-resource-title" title={row.name}>
+                        {row.name}
+                      </div>
+                      {row.kind === 'image' && row.formatTags?.length ? (
+                        <div className="animax-editor-resource-format-tags" title={row.formatTitle}>
+                          {row.formatTags.map((tag) => (
+                            <span className="animax-editor-resource-format-tag" key={tag}>
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
                     </div>
                     <div className="animax-editor-resource-detail" title={row.detail}>
                       {row.detail}
                     </div>
+                    {row.check?.status === 'checking' ? (
+                      <div className="animax-editor-resource-check checking">正在检查资源规范</div>
+                    ) : null}
+                    {row.check?.status === 'error' ? (
+                      <div className="animax-editor-resource-check error" title={row.check.message}>
+                        检查失败：{row.check.message}
+                      </div>
+                    ) : null}
+                    {hasIssues ? (
+                      <div className="animax-editor-resource-check warning">
+                        {row.check?.issues.map((issue) => (
+                          <span key={issue.code}>{issue.message}</span>
+                        ))}
+                      </div>
+                    ) : null}
                     <div className="animax-editor-resource-meta">
                       <div
                         className="animax-resource-replace"
@@ -1829,6 +2324,26 @@ export const AnimaXAssetsPanel: React.FC<AssetsPanelProps> = ({
                           </div>
                         ) : null}
                       </div>
+                      {row.kind === 'video' ? (
+                        <button
+                          type="button"
+                          className="animax-editor-btn action"
+                          onClick={() => openVideoProcess(row)}
+                          disabled={!row.previewUrl}
+                        >
+                          插入 I 帧
+                        </button>
+                      ) : null}
+                      {fixableIssue ? (
+                        <button
+                          type="button"
+                          className="animax-editor-btn action"
+                          onClick={() => fixResource(row)}
+                          disabled={isFixingThis || isFixingResources || !row.previewUrl}
+                        >
+                          {isFixingThis ? '修复中' : fixableIssue.fixLabel || '修复'}
+                        </button>
+                      ) : null}
                     </div>
                   </div>
                   <div className="animax-editor-resource-action">
@@ -1916,6 +2431,16 @@ export const AnimaXAssetsPanel: React.FC<AssetsPanelProps> = ({
           />
         </div>
       )}
+
+      {videoProcessTarget ? (
+        <VideoProcessDialog
+          row={videoProcessTarget}
+          onClose={() => setVideoProcessTarget(null)}
+          onProcess={onProcessVideo}
+          onProbe={onProbeVideo}
+          onApply={onApplyProcessedVideo}
+        />
+      ) : null}
 
       {urlReplaceRow && (
         <div

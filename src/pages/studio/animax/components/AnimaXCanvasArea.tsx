@@ -1,18 +1,21 @@
 import React from 'react';
 import type { AnimaXViewElement, AnimaXViewProps } from '@lynx-js/animax';
 
+import { useAppPreferences } from '../../../../contexts/AppPreferencesContext';
 import type { CreateEditableLayerInput, LayerBoundsOverlay, LayerRow } from '../toolTypes';
 import { estimateOnelineTextSize, formatBytes } from '../toolUtils';
 import { useAnimaX } from './AnimaXContext';
 
 const previewBackgroundOptions = [
-  { label: '透明', value: 'transparent' },
-  { label: '黑', value: '#050505' },
-  { label: '白', value: '#ffffff' },
-  { label: '灰', value: '#6b7280' },
-  { label: '粉', value: '#ff6b9a' },
-  { label: '蓝', value: '#2563eb' },
+  { labelKey: 'animax.canvas.backgroundTransparent', value: 'transparent' },
+  { labelKey: 'animax.canvas.backgroundBlack', value: '#050505' },
+  { labelKey: 'animax.canvas.backgroundWhite', value: '#ffffff' },
+  { labelKey: 'animax.canvas.backgroundGray', value: '#6b7280' },
+  { labelKey: 'animax.canvas.backgroundPink', value: '#ff6b9a' },
+  { labelKey: 'animax.canvas.backgroundBlue', value: '#2563eb' },
 ] as const;
+
+type PreviewBackgroundValue = (typeof previewBackgroundOptions)[number]['value'] | 'custom';
 
 const getPreviewPixelRatio = () => {
   const ratio = typeof window !== 'undefined' ? window.devicePixelRatio : 1;
@@ -76,17 +79,46 @@ declare global {
 }
 
 export const AnimaXCanvasArea: React.FC = () => {
-  const [previewBackground, setPreviewBackground] = React.useState('transparent');
+  const { t, theme } = useAppPreferences();
+  const [previewBackground, setPreviewBackground] =
+    React.useState<PreviewBackgroundValue>('transparent');
   const [customPreviewBackground, setCustomPreviewBackground] = React.useState('#14b8a6');
+  const [backgroundPanelOpen, setBackgroundPanelOpen] = React.useState(false);
+  const [backgroundPanelAlignLeft, setBackgroundPanelAlignLeft] = React.useState(false);
+  const backgroundControlRef = React.useRef<HTMLDivElement>(null);
+  const backgroundButtonRef = React.useRef<HTMLButtonElement>(null);
+  const backgroundPanelId = React.useId();
+
+  React.useEffect(() => {
+    if (!backgroundPanelOpen) return;
+    const handleOutsidePointer = (event: PointerEvent) => {
+      if (!backgroundControlRef.current?.contains(event.target as Node)) {
+        setBackgroundPanelOpen(false);
+      }
+    };
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setBackgroundPanelOpen(false);
+      backgroundButtonRef.current?.focus();
+    };
+    document.addEventListener('pointerdown', handleOutsidePointer);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('pointerdown', handleOutsidePointer);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [backgroundPanelOpen]);
   const {
     animRef,
     totalFrame,
     durationMs,
     fps,
     jsonSizeBytes,
+    lottieLoadStatus,
+    previewStageStatus,
     bindCanvasRef,
     setIsDraggingFile,
-    handleDropFile,
+    handleUploadDrop,
     stageSize,
     animaxViewKey,
     bindAnimRef,
@@ -106,7 +138,7 @@ export const AnimaXCanvasArea: React.FC = () => {
     layerRows,
     activeLayerBoundsKeys,
     runtimeReady,
-    runtimeError,
+    isAnimationReady,
     parsedJson,
     layerBoundsOverlays,
     handleToggleLayerBounds,
@@ -143,8 +175,13 @@ export const AnimaXCanvasArea: React.FC = () => {
   const displayTotalFrame = Math.max(0, Math.round(totalFrame));
   const previewSurfaceSize = Math.max(1, Math.round(stageSize * getPreviewPixelRatio()));
 
+  const themePreviewBackground = theme === 'light' ? '#ffffff' : '#050505';
   const activePreviewBackground =
-    previewBackground === 'custom' ? customPreviewBackground : previewBackground;
+    previewBackground === 'custom'
+      ? customPreviewBackground
+      : previewBackground === 'transparent'
+        ? themePreviewBackground
+        : previewBackground;
   const isTransparentBackground = activePreviewBackground === 'transparent';
 
   const clearTapMissTimer = React.useCallback(() => {
@@ -429,16 +466,51 @@ export const AnimaXCanvasArea: React.FC = () => {
     () => (layerTapPopup ? getTapPopoverStyle(layerTapPopup) : undefined),
     [getTapPopoverStyle, layerTapPopup],
   );
+  const loadStatusLabel =
+    lottieLoadStatus.label === 'JSON 同步中'
+      ? t('animax.canvas.statusJsonSyncing')
+      : lottieLoadStatus.label === '加载异常'
+        ? t('animax.canvas.statusError')
+        : lottieLoadStatus.label === '字体超时'
+          ? t('animax.canvas.statusFontTimeout')
+          : lottieLoadStatus.label === 'JSON 异常'
+            ? t('animax.canvas.statusJsonError')
+            : lottieLoadStatus.label === '运行时加载中'
+              ? t('animax.canvas.statusRuntimeLoading')
+              : lottieLoadStatus.label === '播放器加载中'
+                ? t('animax.canvas.statusPlayerLoading')
+                : lottieLoadStatus.label === '字体加载中'
+                  ? t('animax.canvas.statusFontLoading')
+                  : lottieLoadStatus.label === 'JSON 解析中'
+                    ? t('animax.canvas.statusJsonParsing')
+                    : lottieLoadStatus.label === '加载正常'
+                      ? t('animax.canvas.statusNormal')
+                      : lottieLoadStatus.label;
 
   return (
     <section className="animax-canvas-area">
       <div className="animax-canvas-toolbar">
         <div className="animax-canvas-toolbar-metrics">
           <div className="animax-chip">
-            帧数：<strong className="animax-mono">{Math.round(totalFrame)}</strong>
+            {t('animax.canvas.dimensions')}:
+            <strong className="animax-mono">
+              {Number.isFinite(parsedJson?.w) && parsedJson.w > 0 &&
+              Number.isFinite(parsedJson?.h) && parsedJson.h > 0
+                ? `${parsedJson.w} × ${parsedJson.h}`
+                : '--'}
+            </strong>
           </div>
           <div className="animax-chip">
-            时长：<strong className="animax-mono">{formatDuration(durationMs)}</strong>
+            {t('animax.canvas.frames')}:
+            <strong className="animax-mono">{Math.round(totalFrame)}</strong>
+          </div>
+          <div className="animax-chip">
+            {t('animax.canvas.duration')}:
+            <strong className="animax-mono">{formatDuration(durationMs)}</strong>
+          </div>
+          <div className="animax-chip animax-json-size-chip">
+            {t('animax.canvas.jsonSize')}:
+            <strong className="animax-mono">{formatBytes(jsonSizeBytes)}</strong>
           </div>
           <div className={['animax-chip', 'animax-fps-chip', getFpsTone(fps)].join(' ').trim()}>
             FPS：<strong className="animax-mono">{formatFps(fps)}</strong>
@@ -452,7 +524,11 @@ export const AnimaXCanvasArea: React.FC = () => {
           onClick={handleToggleLayerTapInspect}
           disabled={!runtimeReady}
           aria-pressed={layerTapInspectEnabled}
-          title={layerTapInspectEnabled ? '关闭点选图层' : '点击动画内容查看命中的图层'}
+          title={
+            layerTapInspectEnabled
+              ? t('animax.canvas.inspectOnTitle')
+              : t('animax.canvas.inspectOffTitle')
+          }
         >
           <span className="animax-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" width="15" height="15">
@@ -467,31 +543,79 @@ export const AnimaXCanvasArea: React.FC = () => {
               <circle cx="12" cy="12" r="1.7" fill="currentColor" />
             </svg>
           </span>
-          点选图层
+          {t('animax.canvas.inspectLayers')}
         </button>
         <div className="animax-canvas-toolbar-spacer" />
-        <div className="animax-preview-bg-control" aria-label="预览背景色">
-          <span className="animax-preview-bg-label">背景</span>
+        <div
+          className="animax-preview-bg-control"
+          ref={backgroundControlRef}
+          onBlur={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget)) setBackgroundPanelOpen(false);
+          }}
+        >
+          <button
+            type="button"
+            className="animax-preview-bg-trigger"
+            ref={backgroundButtonRef}
+            aria-label={t('animax.canvas.backgroundAria')}
+            aria-expanded={backgroundPanelOpen}
+            aria-controls={backgroundPanelId}
+            onClick={(event) => {
+              setBackgroundPanelAlignLeft(event.currentTarget.getBoundingClientRect().right < 240);
+              setBackgroundPanelOpen((open) => !open);
+            }}
+          >
+            <span className="animax-preview-bg-label">{t('animax.canvas.background')}</span>
+            <span
+              className={`animax-preview-bg-swatch${previewBackground === 'transparent' ? ' transparent' : ''}`}
+              aria-hidden="true"
+              style={{ '--animax-swatch-color': previewBackground === 'custom'
+                ? customPreviewBackground
+                : previewBackground === 'transparent' ? themePreviewBackground : previewBackground,
+              } as React.CSSProperties}
+            />
+            <span className="animax-preview-bg-chevron" aria-hidden="true" />
+          </button>
+          {backgroundPanelOpen && <div
+            id={backgroundPanelId}
+            className="animax-preview-bg-panel"
+            style={backgroundPanelAlignLeft ? { left: 0, right: 'auto' } : undefined}
+            role="group"
+            aria-label={t('animax.canvas.backgroundAria')}
+          >
           <div className="animax-preview-bg-swatches">
-            {previewBackgroundOptions.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                className={
-                  previewBackground === option.value
-                    ? 'animax-preview-bg-swatch active'
-                    : 'animax-preview-bg-swatch'
-                }
-                style={
-                  option.value === 'transparent'
-                    ? undefined
-                    : ({ '--animax-swatch-color': option.value } as React.CSSProperties)
-                }
-                onClick={() => setPreviewBackground(option.value)}
-                title={`背景：${option.label}`}
-                aria-label={`背景：${option.label}`}
-              />
-            ))}
+            {previewBackgroundOptions.map((option) => {
+              const label = t(option.labelKey);
+              const swatchColor =
+                option.value === 'transparent' ? themePreviewBackground : option.value;
+              const swatchKind = option.value === 'transparent' ? 'transparent' : 'solid';
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  className={[
+                    'animax-preview-bg-swatch',
+                    swatchKind,
+                    previewBackground === option.value ? 'active' : '',
+                  ]
+                    .filter(Boolean)
+                    .join(' ')}
+                  style={
+                    swatchColor === undefined
+                      ? undefined
+                      : ({ '--animax-swatch-color': swatchColor } as React.CSSProperties)
+                  }
+                  onClick={() => {
+                    setPreviewBackground(option.value);
+                    setBackgroundPanelOpen(false);
+                    backgroundButtonRef.current?.focus();
+                  }}
+                  aria-pressed={previewBackground === option.value}
+                  title={t('animax.canvas.backgroundTitle', { label })}
+                  aria-label={t('animax.canvas.backgroundTitle', { label })}
+                />
+              );
+            })}
             <label
               className={
                 previewBackground === 'custom'
@@ -499,11 +623,12 @@ export const AnimaXCanvasArea: React.FC = () => {
                   : 'animax-preview-bg-swatch custom'
               }
               style={{ '--animax-swatch-color': customPreviewBackground } as React.CSSProperties}
-              title="自定义背景"
-              aria-label="自定义背景"
+              title={t('animax.canvas.customBackground')}
+              aria-label={t('animax.canvas.customBackground')}
             >
               <input
                 type="color"
+                aria-label={t('animax.canvas.customBackground')}
                 value={customPreviewBackground}
                 onClick={() => setPreviewBackground('custom')}
                 onChange={(e) => {
@@ -513,9 +638,13 @@ export const AnimaXCanvasArea: React.FC = () => {
               />
             </label>
           </div>
+          </div>}
         </div>
-        <div className="animax-chip animax-json-size-chip">
-          JSON 大小：<strong className="animax-mono">{formatBytes(jsonSizeBytes)}</strong>
+        <div
+          className={['animax-load-status-tag', lottieLoadStatus.tone].join(' ')}
+          title={lottieLoadStatus.detail}
+        >
+          {loadStatusLabel}
         </div>
       </div>
 
@@ -546,12 +675,7 @@ export const AnimaXCanvasArea: React.FC = () => {
           e.preventDefault();
           e.stopPropagation();
           setIsDraggingFile(false);
-          const file = e.dataTransfer.files?.[0];
-          if (!file) return;
-          handleDropFile(file).catch((error) => {
-            const message = error instanceof Error ? error.message : String(error);
-            pushLog(`[错误] 文件加载失败：${message}`);
-          });
+          void handleUploadDrop(e.dataTransfer);
         }}
       >
         <div className="animax-canvas-inner">
@@ -581,10 +705,16 @@ export const AnimaXCanvasArea: React.FC = () => {
               />
             ) : (
               <div className="animax-runtime-placeholder" role="status">
-                <strong>{runtimeError ? '运行时初始化失败' : '正在准备运行时资源'}</strong>
-                <span>{runtimeError || '等待字体、Textra 与视频模块加载完成'}</span>
+                <strong>{previewStageStatus.title}</strong>
+                <span>{previewStageStatus.detail}</span>
               </div>
             )}
+            {runtimeReady && !isAnimationReady ? (
+              <div className="animax-runtime-overlay" role="status">
+                <strong>{previewStageStatus.title}</strong>
+                <span>{previewStageStatus.detail}</span>
+              </div>
+            ) : null}
             {editableLayerPreviews.map((preview) => (
               <div
                 key={preview.key}
@@ -609,7 +739,7 @@ export const AnimaXCanvasArea: React.FC = () => {
               </div>
             ))}
             {layerTapInspectEnabled ? (
-              <div className="animax-layer-tap-hint">点击动画内容查看图层</div>
+              <div className="animax-layer-tap-hint">{t('animax.canvas.tapHint')}</div>
             ) : null}
             {layerTapPopup ? (
               <>
@@ -628,19 +758,23 @@ export const AnimaXCanvasArea: React.FC = () => {
                   onPointerDown={(event) => event.stopPropagation()}
                 >
                   <div className="animax-layer-tap-popover-head">
-                    <span>{layerTapPopup.empty ? '未命中图层' : '命中图层'}</span>
+                    <span>
+                      {layerTapPopup.empty
+                        ? t('animax.canvas.noLayerHit')
+                        : t('animax.canvas.layerHit')}
+                    </span>
                     <button
                       type="button"
                       className="animax-layer-tap-close"
                       onClick={() => setLayerTapPopup(null)}
-                      aria-label="关闭点选结果"
-                      title="关闭"
+                      aria-label={t('animax.canvas.closeTapResult')}
+                      title={t('animax.canvas.close')}
                     >
                       ×
                     </button>
                   </div>
                   {layerTapPopup.empty ? (
-                    <div className="animax-layer-tap-empty">这个位置没有可点选图层。</div>
+                    <div className="animax-layer-tap-empty">{t('animax.canvas.emptyTap')}</div>
                   ) : (
                     <div className="animax-layer-tap-list">
                       {layerTapPopup.hits.map((hit) => {
@@ -656,7 +790,7 @@ export const AnimaXCanvasArea: React.FC = () => {
                                 {hit.index !== undefined ? <span>#{hit.index}</span> : null}
                                 {hit.refId ? <span>{hit.refId}</span> : null}
                                 {hit.row?.isMatte ? (
-                                  <span title="该图层是 Track Matte 源图层，不支持定位">
+                                  <span title={t('animax.canvas.matteSourceTitle')}>
                                     {getTapMatteLabel(hit.row)}
                                   </span>
                                 ) : null}
@@ -676,8 +810,16 @@ export const AnimaXCanvasArea: React.FC = () => {
                                     : 'animax-layer-tap-locate'
                                 }
                                 onClick={() => handleToggleLayerBounds(hit.row as LayerRow)}
-                                title={located ? '取消定位' : '定位图层'}
-                                aria-label={located ? '取消定位图层' : '定位图层'}
+                                title={
+                                  located
+                                    ? t('animax.canvas.cancelLocate')
+                                    : t('animax.canvas.locateLayer')
+                                }
+                                aria-label={
+                                  located
+                                    ? t('animax.canvas.cancelLocate')
+                                    : t('animax.canvas.locateLayer')
+                                }
                               >
                                 <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
                                   <path
@@ -721,8 +863,8 @@ export const AnimaXCanvasArea: React.FC = () => {
               className="animax-btn primary iconBtn"
               onClick={handleTogglePlay}
               disabled={!runtimeReady}
-              aria-label={isPaused ? '播放' : '暂停'}
-              title={isPaused ? '播放' : '暂停'}
+              aria-label={isPaused ? t('animax.canvas.play') : t('animax.canvas.pause')}
+              title={isPaused ? t('animax.canvas.play') : t('animax.canvas.pause')}
             >
               {isPaused ? (
                 <span className="animax-icon" aria-hidden="true">
@@ -742,8 +884,8 @@ export const AnimaXCanvasArea: React.FC = () => {
               type="button"
               className="animax-btn speedBtn"
               onClick={handleCycleSpeed}
-              aria-label="切换播放速度"
-              title="切换播放速度"
+              aria-label={t('animax.canvas.changeSpeed')}
+              title={t('animax.canvas.changeSpeed')}
             >
               x{speed.toFixed(1)}
             </button>
@@ -751,8 +893,8 @@ export const AnimaXCanvasArea: React.FC = () => {
               type="button"
               className={loop ? 'animax-btn primary iconBtn' : 'animax-btn iconBtn'}
               onClick={handleToggleLoop}
-              aria-label={loop ? '关闭循环' : '开启循环'}
-              title={loop ? '关闭循环' : '开启循环'}
+              aria-label={loop ? t('animax.canvas.loopOff') : t('animax.canvas.loopOn')}
+              title={loop ? t('animax.canvas.loopOff') : t('animax.canvas.loopOn')}
             >
               <span className="animax-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" width="16" height="16">
@@ -775,7 +917,7 @@ export const AnimaXCanvasArea: React.FC = () => {
             onPointerUp={handleScrubEnd}
             onPointerCancel={handleScrubEnd}
           />
-          <div className="animax-frame-indicator" aria-label="播放帧信息">
+          <div className="animax-frame-indicator" aria-label={t('animax.canvas.frameInfo')}>
             <strong>
               {displayCurrentFrame}
               <span>/</span>

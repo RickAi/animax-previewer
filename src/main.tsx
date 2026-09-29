@@ -4,10 +4,11 @@ import { Toaster } from 'react-hot-toast';
 import { AnimaXProvider } from './pages/studio/animax/components/AnimaXContext';
 import AnimaX from './pages/studio/animax';
 import './index.css';
+import { AppPreferencesProvider } from './contexts/AppPreferencesContext';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <AnimaXProvider>
+    <AppPreferencesProvider><AnimaXProvider>
       <AnimaX />
       <Toaster
         position="top-center"
@@ -20,6 +21,6 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           },
         }}
       />
-    </AnimaXProvider>
+    </AnimaXProvider></AppPreferencesProvider>
   </React.StrictMode>,
 );

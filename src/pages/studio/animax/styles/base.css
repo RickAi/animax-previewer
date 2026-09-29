@@ -3,24 +3,60 @@
   --animax-bg: var(--bg-app);
   --animax-panel: var(--bg-panel);
   --animax-panel2: var(--bg-card);
+  --animax-surface: var(--bg-card);
+  --animax-surface-hover: var(--bg-card-hover);
+  --animax-surface-raised: var(--bg-elevated);
+  --animax-input-bg: var(--bg-input);
   --animax-line: var(--border-subtle);
   --animax-line2: var(--border-active);
   --animax-text: var(--text-primary);
   --animax-muted: var(--text-secondary);
   --animax-muted2: var(--text-muted);
   --animax-accent: var(--accent-primary);
-  --animax-accent2: #22c55e;
-  --animax-warn: #fbbf24;
-  --animax-danger: #fb7185;
-  --animax-ok: #34d399;
-  --animax-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  --animax-accent-hover: var(--accent-hover);
+  --animax-accent-text: #dbeafe;
+  --animax-on-accent: #ffffff;
+  --animax-accent2: var(--success-primary);
+  --animax-info-text: #bae6fd;
+  --animax-success-text: #a7f3d0;
+  --animax-warning-text: #fde68a;
+  --animax-danger-text: #fecdd3;
+  --animax-accent-chip-text: #d9d7ff;
+  --animax-warn: var(--warning-primary);
+  --animax-danger: var(--danger-primary);
+  --animax-ok: var(--success-primary);
+  --animax-shadow: var(--surface-shadow);
   --animax-control-height: 32px;
   --animax-control-radius: 8px;
   --animax-control-font-size: 12px;
   --animax-control-font-weight: 700;
-  --animax-control-primary-border: rgba(129, 126, 255, 0.46);
-  --animax-control-primary-bg: rgba(129, 126, 255, 0.12);
-  --animax-control-primary-text: #d9d7ff;
+  --animax-control-primary-border: color-mix(in srgb, var(--animax-accent) 42%, var(--animax-line));
+  --animax-control-primary-bg: color-mix(in srgb, var(--animax-accent) 14%, var(--animax-panel));
+  --animax-control-primary-hover-bg: color-mix(
+    in srgb,
+    var(--animax-accent) 20%,
+    var(--animax-panel)
+  );
+  --animax-control-primary-text: var(--animax-accent-text);
+  --animax-card-bg: var(--animax-surface);
+  --animax-card-hover-bg: var(--animax-surface-hover);
+  --animax-card-border: var(--animax-line);
+  --animax-chip-bg: color-mix(in srgb, var(--text-muted) 9%, transparent);
+  --animax-chip-border: color-mix(in srgb, var(--text-muted) 24%, transparent);
+  --animax-overlay-bg: color-mix(in srgb, var(--bg-panel) 86%, transparent);
+  --animax-modal-backdrop: rgba(0, 0, 0, 0.6);
+  --animax-tooltip-bg: var(--bg-elevated);
+  --animax-preview-control-bg: rgba(18, 19, 24, 0.9);
+  --animax-inline-code-bg: rgba(255, 255, 255, 0.08);
+  --animax-code-bg: #1e1e1e;
+  --animax-code-text: #d4d4d4;
+  --animax-checker-mark: rgba(255, 255, 255, 0.035);
+  --animax-checker-bg: #050505;
+  --animax-popover-bg: rgba(18, 18, 22, 0.94);
+  --animax-popover-hover-bg: rgba(102, 99, 246, 0.14);
+  --animax-popover-head-text: #f4f7ff;
+  --animax-popover-shadow:
+    0 18px 40px rgba(0, 0, 0, 0.42), 0 0 0 1px rgba(255, 255, 255, 0.03) inset;
   --animax-mono:
     ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
     monospace;
@@ -34,6 +70,40 @@
   overflow: hidden;
 }
 
+:root[data-theme='light'] .animax-tool-container {
+  --animax-accent-text: #1d4ed8;
+  --animax-info-text: #0369a1;
+  --animax-success-text: #047857;
+  --animax-warning-text: #92400e;
+  --animax-danger-text: #be123c;
+  --animax-accent-chip-text: #1d4ed8;
+  --animax-control-primary-bg: color-mix(in srgb, var(--animax-accent) 8%, var(--animax-panel));
+  --animax-control-primary-hover-bg: color-mix(
+    in srgb,
+    var(--animax-accent) 13%,
+    var(--animax-panel)
+  );
+  --animax-card-bg: #ffffff;
+  --animax-card-hover-bg: #f8fafc;
+  --animax-card-border: #dde4ef;
+  --animax-chip-bg: #f1f5f9;
+  --animax-chip-border: #d7e0ec;
+  --animax-overlay-bg: rgba(255, 255, 255, 0.86);
+  --animax-modal-backdrop: color-mix(in srgb, var(--bg-app) 74%, transparent);
+  --animax-tooltip-bg: #ffffff;
+  --animax-preview-control-bg: rgba(255, 255, 255, 0.92);
+  --animax-inline-code-bg: rgba(15, 23, 42, 0.07);
+  --animax-code-bg: #f8fafc;
+  --animax-code-text: #1f2937;
+  --animax-checker-mark: rgba(15, 23, 42, 0.06);
+  --animax-checker-bg: #ffffff;
+  --animax-popover-bg: rgba(255, 255, 255, 0.94);
+  --animax-popover-hover-bg: color-mix(in srgb, var(--animax-accent) 8%, transparent);
+  --animax-popover-head-text: var(--animax-text);
+  --animax-popover-shadow:
+    0 18px 42px rgba(15, 23, 42, 0.16), 0 0 0 1px rgba(15, 23, 42, 0.04) inset;
+}
+
 .animax-tool-container * {
   box-sizing: border-box;
 }
@@ -42,6 +112,21 @@
   height: 100%;
   display: grid;
   grid-template-rows: auto 1fr auto;
+}
+
+.animax-card-layout {
+  height: 100%;
+  min-height: 0;
+  background: transparent;
+  overflow: hidden;
+}
+
+.animax-card-layout .animax-app {
+  overflow: hidden;
+  border: 1px solid var(--animax-line);
+  border-radius: var(--radius-md);
+  background: var(--animax-panel);
+  box-shadow: none;
 }
 
 .animax-topbar {
@@ -67,55 +152,32 @@
 
 .animax-topbar-controls {
   display: grid;
-  grid-template-columns: auto auto minmax(320px, 1fr) auto auto 40px;
+  grid-template-columns: auto auto auto auto minmax(180px, 1fr) auto auto auto auto;
   align-items: stretch;
   gap: 10px;
   width: 100%;
 }
 
-.animax-file-picker {
-  position: relative;
+.animax-card-layout .animax-topbar {
+  padding: 8px;
 }
 
-.animax-file-picker-menu {
-  position: absolute;
-  z-index: 40;
-  top: calc(100% + 8px);
-  left: 0;
-  width: 260px;
-  padding: 6px;
-  border: 1px solid var(--animax-line);
-  border-radius: 12px;
-  background: #1b1b1f;
-  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.34);
+.animax-card-layout .animax-topbar-controls {
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
 }
 
-.animax-file-picker-menu button {
-  width: 100%;
-  border: 0;
-  border-radius: 9px;
-  background: transparent;
-  color: var(--animax-text);
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  padding: 9px 10px;
-  text-align: left;
-}
-
-.animax-file-picker-menu button:hover {
-  background: rgba(102, 99, 246, 0.14);
-}
-
-.animax-file-picker-menu strong {
-  font-size: 13px;
-}
-
-.animax-file-picker-menu span {
-  color: var(--animax-muted);
+.animax-card-layout .animax-btn.topbar-action {
+  min-width: 64px;
+  height: 30px;
+  padding: 0 10px;
   font-size: 12px;
-  line-height: 1.35;
+}
+
+.animax-card-layout .animax-input {
+  height: 30px;
+  min-width: 0;
+  padding: 4px 8px;
 }
 
 .animax-upload-progress {
@@ -164,7 +226,7 @@
   margin: 8px 0 7px;
   overflow: hidden;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--animax-chip-bg);
 }
 
 .animax-upload-progress-bar {
@@ -192,7 +254,7 @@
 
 .animax-btn {
   border: 1px solid var(--animax-line);
-  background: var(--bg-input);
+  background: var(--animax-input-bg);
   color: var(--animax-text);
   border-radius: var(--radius-sm);
   padding: 6px 12px;
@@ -216,8 +278,8 @@
 }
 
 .animax-btn:hover {
-  border-color: var(--border-active);
-  background: var(--bg-card-hover);
+  border-color: var(--animax-line2);
+  background: var(--animax-surface-hover);
 }
 
 .animax-btn:focus-visible {
@@ -232,12 +294,12 @@
 .animax-btn.primary {
   border-color: var(--animax-accent);
   background: var(--animax-accent);
-  color: #fff;
+  color: var(--animax-on-accent);
 }
 
 .animax-btn.primary:hover {
-  background: var(--accent-hover);
-  border-color: var(--accent-hover);
+  background: var(--animax-accent-hover);
+  border-color: var(--animax-accent-hover);
 }
 
 .animax-btn.topbar-action {
@@ -251,44 +313,47 @@
 }
 
 .animax-btn.load-action {
-  border-color: rgba(102, 99, 246, 0.88);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.13), rgba(255, 255, 255, 0)),
-    #5f5cf5;
-  color: #fff;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    0 8px 20px rgba(102, 99, 246, 0.22);
+  border-color: var(--animax-accent);
+  background: var(--animax-accent);
+  color: var(--animax-on-accent);
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--animax-accent) 22%, transparent);
 }
 
 .animax-btn.load-action:hover {
-  border-color: rgba(129, 126, 255, 0.95);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0)),
-    #6b68ff;
+  border-color: var(--animax-accent-hover);
+  background: var(--animax-accent-hover);
 }
 
 .animax-btn.file-action,
 .animax-btn.random-action,
-.animax-btn.repack-action,
-.animax-btn.share-action {
-  border-color: rgba(102, 99, 246, 0.48);
-  background: rgba(102, 99, 246, 0.1);
-  color: #f0efff;
+.animax-btn.download-action,
+.animax-btn.share-action,
+.animax-btn.card-share-action {
+  border-color: var(--animax-control-primary-border);
+  background: var(--animax-control-primary-bg);
+  color: var(--animax-control-primary-text);
 }
 
 .animax-btn.file-action:hover,
 .animax-btn.random-action:hover,
-.animax-btn.repack-action:hover,
-.animax-btn.share-action:hover {
-  border-color: rgba(129, 126, 255, 0.75);
-  background: rgba(102, 99, 246, 0.16);
+.animax-btn.share-action:hover,
+.animax-btn.card-share-action:hover {
+  border-color: var(--animax-accent);
+  background: var(--animax-control-primary-hover-bg);
 }
 
-.animax-btn.share-action {
-  width: 40px;
-  min-width: 40px;
+.animax-btn.topbar-action:is(.download-action, .share-action, .card-share-action).iconBtn {
+  width: 38px;
+  min-width: 38px;
+  height: 38px;
   padding: 0;
+}
+
+.animax-card-layout
+  .animax-btn.topbar-action:is(.download-action, .share-action, .card-share-action).iconBtn {
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
 }
 
 .animax-btn.ghost {
@@ -328,6 +393,73 @@
   padding: 0;
 }
 
+.animax-btn[data-tooltip] {
+  position: relative;
+}
+
+.animax-btn[data-tooltip]::before,
+.animax-btn[data-tooltip]::after {
+  position: absolute;
+  left: 50%;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-50%) translateY(-2px);
+  transition:
+    opacity 0.12s ease,
+    transform 0.12s ease;
+  z-index: 30;
+}
+
+.animax-btn[data-tooltip]::before {
+  top: calc(100% + 3px);
+  content: '';
+  border-right: 6px solid transparent;
+  border-bottom: 6px solid rgba(17, 24, 39, 0.96);
+  border-left: 6px solid transparent;
+}
+
+.animax-btn[data-tooltip]::after {
+  top: calc(100% + 9px);
+  content: attr(data-tooltip);
+  max-width: 220px;
+  border-radius: 10px;
+  background: rgba(17, 24, 39, 0.96);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.26);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+  padding: 8px 12px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.animax-btn[data-tooltip]:not(:disabled):hover::before,
+.animax-btn[data-tooltip]:not(:disabled):hover::after,
+.animax-btn[data-tooltip]:focus-visible::before,
+.animax-btn[data-tooltip]:focus-visible::after {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.animax-topbar-controls > .animax-btn[data-tooltip]:last-child::before,
+.animax-topbar-controls > .animax-btn[data-tooltip]:last-child::after {
+  right: 0;
+  left: auto;
+  transform: translateY(-2px);
+}
+
+.animax-topbar-controls > .animax-btn[data-tooltip]:last-child::before {
+  right: 13px;
+}
+
+.animax-topbar-controls > .animax-btn[data-tooltip]:last-child:not(:disabled):hover::before,
+.animax-topbar-controls > .animax-btn[data-tooltip]:last-child:not(:disabled):hover::after,
+.animax-topbar-controls > .animax-btn[data-tooltip]:last-child:focus-visible::before,
+.animax-topbar-controls > .animax-btn[data-tooltip]:last-child:focus-visible::after {
+  transform: translateY(0);
+}
+
 .animax-btn.speedBtn {
   height: 32px;
   padding: 0 10px;
@@ -338,8 +470,8 @@
 .animax-btn.canvas-mode {
   gap: 6px;
   height: 28px;
-  border-color: rgba(148, 163, 184, 0.22);
-  background: rgba(255, 255, 255, 0.045);
+  border-color: var(--animax-chip-border);
+  background: var(--animax-chip-bg);
   color: var(--animax-muted);
   padding: 0 10px;
   font-size: 12px;
@@ -347,18 +479,16 @@
 }
 
 .animax-btn.canvas-mode:hover {
-  border-color: rgba(147, 197, 253, 0.45);
-  background: rgba(147, 197, 253, 0.08);
+  border-color: var(--animax-control-primary-border);
+  background: var(--animax-control-primary-bg);
   color: var(--animax-text);
 }
 
 .animax-btn.canvas-mode.active {
-  border-color: rgba(147, 197, 253, 0.72);
-  background:
-    linear-gradient(180deg, rgba(147, 197, 253, 0.18), rgba(102, 99, 246, 0.12)),
-    rgba(129, 126, 255, 0.1);
-  box-shadow: 0 0 0 1px rgba(147, 197, 253, 0.18) inset;
-  color: #f8fbff;
+  border-color: var(--animax-accent);
+  background: var(--animax-control-primary-bg);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--animax-accent) 18%, transparent) inset;
+  color: var(--animax-control-primary-text);
 }
 
 .animax-icon {
@@ -382,7 +512,7 @@
 
 .animax-chip {
   border: 1px solid var(--animax-line);
-  background: var(--bg-input);
+  background: var(--animax-input-bg);
   border-radius: var(--radius-sm);
   padding: 4px 8px;
   font-size: 12px;
@@ -401,33 +531,33 @@
 }
 
 .animax-fps-chip.good {
-  color: #a7f3d0;
-  border-color: rgba(16, 185, 129, 0.32);
-  background: rgba(6, 78, 59, 0.22);
+  color: var(--animax-ok);
+  border-color: color-mix(in srgb, var(--animax-ok) 34%, transparent);
+  background: color-mix(in srgb, var(--animax-ok) 12%, transparent);
 }
 
 .animax-fps-chip.good strong {
-  color: #d1fae5;
+  color: var(--animax-ok);
 }
 
 .animax-fps-chip.warning {
-  color: #fde68a;
-  border-color: rgba(245, 158, 11, 0.34);
-  background: rgba(120, 53, 15, 0.2);
+  color: var(--animax-warn);
+  border-color: color-mix(in srgb, var(--animax-warn) 34%, transparent);
+  background: color-mix(in srgb, var(--animax-warn) 12%, transparent);
 }
 
 .animax-fps-chip.warning strong {
-  color: #fef3c7;
+  color: var(--animax-warn);
 }
 
 .animax-fps-chip.danger {
-  color: #fecaca;
-  border-color: rgba(248, 113, 113, 0.34);
-  background: rgba(127, 29, 29, 0.2);
+  color: var(--animax-danger);
+  border-color: color-mix(in srgb, var(--animax-danger) 34%, transparent);
+  background: color-mix(in srgb, var(--animax-danger) 12%, transparent);
 }
 
 .animax-fps-chip.danger strong {
-  color: #fee2e2;
+  color: var(--animax-danger);
 }
 
 .animax-input {
@@ -436,7 +566,7 @@
   gap: 8px;
   height: 38px;
   border: 1px solid var(--border-input);
-  background: var(--bg-input);
+  background: var(--animax-input-bg);
   border-radius: var(--radius-sm);
   padding: 6px 10px;
   min-width: 240px;
@@ -487,10 +617,6 @@
   .animax-btn.repack-action {
     grid-column: auto;
   }
-
-  .animax-btn.share-action {
-    width: 100%;
-  }
 }
 
 @media (max-width: 680px) {
@@ -501,8 +627,19 @@
   .animax-url-input {
     grid-column: 1 / -1;
   }
+}
 
-  .animax-btn.share-action {
+@media (max-width: 560px) {
+  .animax-card-layout .animax-topbar-controls {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .animax-card-layout .animax-btn.file-action {
     min-width: 0;
+  }
+
+  .animax-card-layout .animax-url-input {
+    grid-column: 1 / 2;
+    grid-row: 1;
   }
 }

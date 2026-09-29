@@ -1,5 +1,6 @@
 import React from 'react';
 
+import { useAppPreferences } from '../../../../contexts/AppPreferencesContext';
 import { useAnimaX } from './AnimaXContext';
 import {
   AnimaXAssetsPanel,
@@ -8,22 +9,34 @@ import {
   AnimaXTextPanel,
 } from './AnimaXInspectorPanels';
 
-export const AnimaXSidebar: React.FC = () => {
+interface AnimaXSidebarProps {
+  layout?: 'full' | 'card';
+}
+
+export const AnimaXSidebar: React.FC<AnimaXSidebarProps> = ({ layout = 'full' }) => {
+  const { t } = useAppPreferences();
+  const isCardLayout = layout === 'card';
   const {
     activeTab,
     setActiveTab,
     pushLog,
+    src,
     jsonEditorText,
     jsonPreviewStatus,
+    jsonSizeBytes,
     canResetJsonEditor,
     handleJsonEditorTextChange,
     handleResetJsonEditor,
+    parsedJson,
+    composition,
     textLayerRows,
     layerRows,
     activeLayerBoundsKeys,
     layerBoundsOverlays,
     textDrafts,
     assetRows,
+    resourceWarningCount,
+    isFixingResources,
     handleTextDraftChange,
     handleTextLayerUpdate,
     handleToggleLayerBounds,
@@ -39,6 +52,11 @@ export const AnimaXSidebar: React.FC = () => {
     handleReplaceResource,
     handleReplaceResourceFromUrl,
     handleReplaceFontStyle,
+    handleProcessVideoResource,
+    handleProbeVideoResource,
+    handleApplyProcessedVideoResource,
+    handleFixResource,
+    handleFixAllResources,
     dynamicResourceOn,
     handleToggleDynamicResource,
     canApplyDynamicResourceCode,
@@ -46,104 +64,135 @@ export const AnimaXSidebar: React.FC = () => {
     setDynamicResourceCode,
   } = useAnimaX();
 
+  const tabs = (
+    isCardLayout
+      ? [
+          ['layers', t('animax.sidebar.layers'), true],
+          ['assets', t('animax.sidebar.assets'), true],
+        ]
+      : [
+          ['layers', t('animax.sidebar.layers'), true],
+          ['assets', t('animax.sidebar.assets'), true],
+          ['text', t('animax.sidebar.text'), true],
+          ['json', 'JSON', true],
+        ]
+  ) as readonly (readonly [typeof activeTab, string, boolean])[];
+
+  React.useEffect(() => {
+    if (isCardLayout && activeTab !== 'layers' && activeTab !== 'assets') {
+      setActiveTab('layers');
+    }
+  }, [activeTab, isCardLayout, setActiveTab]);
+
   return (
     <aside className="animax-side">
       <div className="animax-tabs" id="tabs">
-        {/* TODO: 动态资源、性能 TAB 暂时隐藏，等调试能力稳定后再恢复入口。 */}
-        {(
-          [
-            ['layers', '图层', true],
-            ['assets', '资源', true],
-            ['text', '文本', true],
-            ['json', 'JSON', true],
-          ] as const
-        ).map(([key, label, enabled]) => (
+        {tabs.map(([key, label, enabled]) => (
           <button
             key={key}
             type="button"
             className={`${activeTab === key ? 'animax-tab active' : 'animax-tab'}${enabled ? '' : ' soft-disabled'}`}
             onClick={() => {
               if (!enabled) {
-                pushLog(`[信息] ${label} 暂未开放`);
+                pushLog(t('animax.sidebar.tabUnavailable', { label }));
                 return;
               }
               setActiveTab(key);
             }}
           >
             {label}
+            {key === 'assets' && resourceWarningCount > 0 ? (
+              <span className="animax-tab-warning">{resourceWarningCount}</span>
+            ) : null}
           </button>
         ))}
       </div>
 
       <div className="animax-panel">
-        <div className={activeTab === 'text' ? 'tabpane' : 'animax-hidden'} data-pane="text">
-          <AnimaXTextPanel
-            textLayerRows={textLayerRows}
-            textDrafts={textDrafts}
-            onDraftChange={handleTextDraftChange}
-            onUpdate={handleTextLayerUpdate}
-          />
-        </div>
+        {activeTab === 'text' ? (
+          <div className="tabpane" data-pane="text">
+            <AnimaXTextPanel
+              textLayerRows={textLayerRows}
+              textDrafts={textDrafts}
+              onDraftChange={handleTextDraftChange}
+              onUpdate={handleTextLayerUpdate}
+            />
+          </div>
+        ) : null}
 
-        <div className={activeTab === 'layers' ? 'tabpane' : 'animax-hidden'} data-pane="layers">
-          <AnimaXLayersPanel
-            layerRows={layerRows}
-            activeLayerBoundsKeys={activeLayerBoundsKeys}
-            layerBoundsOverlays={layerBoundsOverlays}
-            onToggleBounds={handleToggleLayerBounds}
-            onSelectLayer={handleSelectLayer}
-            onPreviewCreateLayer={handlePreviewEditableLayer}
-            onCancelCreateLayerPreview={handleCancelEditableLayerPreview}
-            onCreateLayer={handleCreateEditableLayer}
-            onPreviewLayerTransform={handlePreviewLayerTransform}
-            onCancelLayerTransformPreview={handleCancelLayerTransformPreview}
-            onPreviewLayerVisibility={handlePreviewLayerVisibility}
-            onCancelLayerVisibilityPreview={handleCancelLayerVisibilityPreview}
-            onApplyLayerEdit={handleApplyLayerEdit}
-          />
-        </div>
+        {activeTab === 'layers' ? (
+          <div className="tabpane" data-pane="layers">
+            <AnimaXLayersPanel
+              layerRows={layerRows}
+              activeLayerBoundsKeys={activeLayerBoundsKeys}
+              layerBoundsOverlays={layerBoundsOverlays}
+              onToggleBounds={handleToggleLayerBounds}
+              onSelectLayer={handleSelectLayer}
+              onPreviewCreateLayer={handlePreviewEditableLayer}
+              onCancelCreateLayerPreview={handleCancelEditableLayerPreview}
+              onCreateLayer={handleCreateEditableLayer}
+              onPreviewLayerTransform={handlePreviewLayerTransform}
+              onCancelLayerTransformPreview={handleCancelLayerTransformPreview}
+              onPreviewLayerVisibility={handlePreviewLayerVisibility}
+              onCancelLayerVisibilityPreview={handleCancelLayerVisibilityPreview}
+              onApplyLayerEdit={handleApplyLayerEdit}
+            />
+          </div>
+        ) : null}
 
-        <div className={activeTab === 'assets' ? 'tabpane' : 'animax-hidden'} data-pane="assets">
-          <AnimaXAssetsPanel
-            assetRows={assetRows}
-            onReplace={handleReplaceResource}
-            onReplaceUrl={handleReplaceResourceFromUrl}
-            onReplaceFontStyle={handleReplaceFontStyle}
-          />
-        </div>
+        {activeTab === 'assets' ? (
+          <div className="tabpane" data-pane="assets">
+            <AnimaXAssetsPanel
+              assetRows={assetRows}
+              onReplace={handleReplaceResource}
+              onReplaceUrl={handleReplaceResourceFromUrl}
+              onReplaceFontStyle={handleReplaceFontStyle}
+              onProcessVideo={handleProcessVideoResource}
+              onProbeVideo={handleProbeVideoResource}
+              onApplyProcessedVideo={handleApplyProcessedVideoResource}
+              onFixResource={handleFixResource}
+              onFixAllResources={handleFixAllResources}
+              isFixingResources={isFixingResources}
+            />
+          </div>
+        ) : null}
 
-        <div className={activeTab === 'json' ? 'tabpane' : 'animax-hidden'} data-pane="json">
-          <AnimaXJsonPanel
-            jsonEditorText={jsonEditorText}
-            previewStatus={jsonPreviewStatus}
-            canReset={canResetJsonEditor}
-            onChange={handleJsonEditorTextChange}
-            onReset={handleResetJsonEditor}
-          />
-        </div>
+        {activeTab === 'json' ? (
+          <div className="tabpane" data-pane="json">
+            <AnimaXJsonPanel
+              jsonEditorText={jsonEditorText}
+              previewStatus={jsonPreviewStatus}
+              canReset={canResetJsonEditor}
+              onChange={handleJsonEditorTextChange}
+              onReset={handleResetJsonEditor}
+            />
+          </div>
+        ) : null}
 
-        <div className={activeTab === 'script' ? 'tabpane' : 'animax-hidden'} data-pane="script">
-          <div className="animax-section">
-            <h3>动态资源</h3>
-            <div className="subline">动态属性调试</div>
 
-            <div className="animax-editor">
-              <div className="toolbar">
-                <button
-                  type="button"
-                  className={dynamicResourceOn ? 'animax-btn small primary' : 'animax-btn small'}
-                  onClick={handleToggleDynamicResource}
-                  disabled={!dynamicResourceOn && !canApplyDynamicResourceCode}
-                >
-                  应用下方代码
-                </button>
-              </div>
-              <div className="body">
-                <textarea
-                  spellCheck={false}
-                  value={dynamicResourceCode}
-                  onChange={(e) => setDynamicResourceCode(e.currentTarget.value)}
-                  placeholder={`调用案例：
+        {activeTab === 'script' ? (
+          <div className="tabpane" data-pane="script">
+            <div className="animax-section">
+              <h3>{t('animax.sidebar.dynamicResource')}</h3>
+              <div className="subline">{t('animax.sidebar.dynamicDebug')}</div>
+
+              <div className="animax-editor">
+                <div className="toolbar">
+                  <button
+                    type="button"
+                    className={dynamicResourceOn ? 'animax-btn small primary' : 'animax-btn small'}
+                    onClick={handleToggleDynamicResource}
+                    disabled={!dynamicResourceOn && !canApplyDynamicResourceCode}
+                  >
+                    {t('animax.sidebar.applyCode')}
+                  </button>
+                </div>
+                <div className="body">
+                  <textarea
+                    spellCheck={false}
+                    value={dynamicResourceCode}
+                    onChange={(e) => setDynamicResourceCode(e.currentTarget.value)}
+                    placeholder={`调用案例：
 animRef.current?.updateTextByLayerName('文本图层', '你好');
 
 API 列表：
@@ -154,16 +203,16 @@ updateTextByLayerName(layerName: string, newText: string, targetFrame?: number, 
 updateImageById(imageId: string, newImageUrl: string): void;
 updateVideoById(videoId: string, newVideoUrl: string): void;
 updateFontByName(fontName: string, newFontPath: string): void;`}
-                />
-              </div>
-              <div className="animax-statusline">
-                状态：{dynamicResourceOn ? '已开启' : '已关闭'}
+                  />
+                </div>
+                <div className="animax-statusline">
+                  {t('animax.sidebar.status')}:
+                  {dynamicResourceOn ? t('animax.sidebar.enabled') : t('animax.sidebar.disabled')}
+                </div>
               </div>
             </div>
           </div>
-        </div>
-
-        {/* TODO: 性能面板入口暂时隐藏，后续恢复 TAB 时再启用。 */}
+        ) : null}
       </div>
     </aside>
   );

@@ -49,6 +49,12 @@ interface AnimaXJsonCodeEditorProps {
 }
 
 type JsonTreeCursor = ReturnType<ReturnType<typeof syntaxTree>['cursorAt']>;
+type JsonSyntaxNodeRef = {
+  name: string;
+  from: number;
+  to: number;
+};
+const JSON_EDITOR_FULL_FEATURE_MAX_CHARS = 50 * 1024;
 
 class JsonDocBadgeWidget extends WidgetType {
   toDOM() {
@@ -81,6 +87,7 @@ export const AnimaXJsonCodeEditor: React.FC<AnimaXJsonCodeEditorProps> = ({
   const schemaRef = useRef<LottieSchemaDocument | null>(null);
   const externalUpdateRef = useRef(false);
   const [formatError, setFormatError] = useState<string | null>(null);
+  const isLargeDocument = value.length > JSON_EDITOR_FULL_FEATURE_MAX_CHARS;
 
   useEffect(() => {
     onChangeRef.current = onChange;
@@ -115,12 +122,11 @@ export const AnimaXJsonCodeEditor: React.FC<AnimaXJsonCodeEditorProps> = ({
       highlightSelectionMatches(),
       json(),
       foldService.of(jsonPropertyFoldService),
-      linter(jsonParseLinter()),
-      lintGutter(),
+      ...(isLargeDocument ? [] : [linter(jsonParseLinter()), lintGutter()]),
       syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
       keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap, indentWithTab]),
       indentOnInput(),
-      createJsonDocsExtension(() => schemaRef.current),
+      ...(isLargeDocument ? [] : [createJsonDocsExtension(() => schemaRef.current)]),
       EditorView.updateListener.of((update) => {
         if (!update.docChanged || externalUpdateRef.current) return;
         onChangeRef.current(update.state.doc.toString());
@@ -150,7 +156,7 @@ export const AnimaXJsonCodeEditor: React.FC<AnimaXJsonCodeEditorProps> = ({
         },
       }),
     ],
-    [],
+    [isLargeDocument],
   );
 
   useEffect(() => {
@@ -385,7 +391,7 @@ function buildPropertyDecorations(view: EditorView) {
     tree.iterate({
       from: range.from,
       to: range.to,
-      enter: (node) => {
+      enter: (node: JsonSyntaxNodeRef) => {
         if (node.name !== 'PropertyName') return;
         decorations.push(propertyMark.range(node.from, node.to));
         decorations.push(propertyBadge.range(node.to));

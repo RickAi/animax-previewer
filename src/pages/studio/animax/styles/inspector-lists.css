@@ -121,6 +121,23 @@
   gap: 10px;
 }
 
+.animax-editor-list-more {
+  min-height: 38px;
+  border: 1px solid rgba(129, 126, 255, 0.32);
+  border-radius: var(--radius-sm);
+  background: rgba(129, 126, 255, 0.1);
+  color: var(--animax-accent-chip-text);
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.animax-editor-list-more:hover {
+  border-color: rgba(147, 197, 253, 0.62);
+  background: rgba(147, 197, 253, 0.14);
+  color: var(--animax-text);
+}
+
 .animax-editor-resource-summary {
   display: flex;
   align-items: center;
@@ -144,9 +161,9 @@
   align-items: center;
   gap: 6px;
   min-height: 24px;
-  border: 1px solid rgba(148, 163, 184, 0.22);
+  border: 1px solid var(--animax-chip-border);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.035);
+  background: var(--animax-chip-bg);
   color: var(--animax-muted);
   padding: 0 9px;
   font-size: 12px;
@@ -155,9 +172,45 @@
 }
 
 .animax-editor-resource-summary-item strong {
-  color: #d9d7ff;
+  color: var(--animax-control-primary-text);
   font-family: var(--animax-mono);
   font-size: 12px;
+}
+
+.animax-editor-resource-fix-all {
+  min-height: 24px;
+  border: 1px solid rgba(180, 83, 9, 0.42);
+  border-radius: 999px;
+  background: rgba(180, 83, 9, 0.14);
+  color: #92400e;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  padding: 0 10px;
+}
+
+.animax-editor-resource-fix-all:hover:not(:disabled) {
+  border-color: rgba(146, 64, 14, 0.58);
+  background: rgba(180, 83, 9, 0.2);
+  color: #78350f;
+}
+
+.animax-editor-resource-fix-all:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.animax-editor-resource-check-error {
+  margin-bottom: 10px;
+  border: 1px solid rgba(251, 113, 133, 0.28);
+  border-radius: var(--radius-sm);
+  background: rgba(251, 113, 133, 0.08);
+  color: var(--animax-danger);
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 8px 10px;
 }
 
 .animax-editor-resource-card {
@@ -213,9 +266,9 @@
 .animax-editor-resource-kind {
   display: inline-flex;
   align-items: center;
-  border: 1px solid rgba(148, 163, 184, 0.28);
+  border: 1px solid var(--animax-chip-border);
   border-radius: 999px;
-  background: rgba(148, 163, 184, 0.08);
+  background: var(--animax-chip-bg);
   padding: 2px 7px;
   color: var(--animax-muted);
   font-size: 11px;
@@ -226,43 +279,43 @@
 .animax-editor-layer-kind.image {
   border-color: rgba(56, 189, 248, 0.36);
   background: rgba(56, 189, 248, 0.1);
-  color: #bae6fd;
+  color: var(--animax-info-text);
 }
 
 .animax-editor-layer-kind.text {
   border-color: rgba(52, 211, 153, 0.34);
   background: rgba(16, 185, 129, 0.1);
-  color: #a7f3d0;
+  color: var(--animax-success-text);
 }
 
 .animax-editor-layer-kind.solid {
   border-color: rgba(251, 191, 36, 0.36);
   background: rgba(251, 191, 36, 0.1);
-  color: #fde68a;
+  color: var(--animax-warning-text);
 }
 
 .animax-editor-layer-kind.precomp {
   border-color: rgba(129, 126, 255, 0.38);
   background: rgba(102, 99, 246, 0.12);
-  color: #d9d7ff;
+  color: var(--animax-accent-chip-text);
 }
 
 .animax-editor-layer-kind.shape {
   border-color: rgba(244, 114, 182, 0.36);
   background: rgba(236, 72, 153, 0.1);
-  color: #fbcfe8;
+  color: color-mix(in srgb, #ec4899 64%, var(--animax-text));
 }
 
 .animax-editor-layer-kind.video {
   border-color: rgba(45, 212, 191, 0.34);
   background: rgba(20, 184, 166, 0.1);
-  color: #99f6e4;
+  color: var(--animax-success-text);
 }
 
 .animax-editor-layer-kind.audio {
   border-color: rgba(251, 146, 60, 0.36);
   background: rgba(249, 115, 22, 0.1);
-  color: #fed7aa;
+  color: var(--animax-warning-text);
 }
 
 .animax-editor-layer-kind.camera {
@@ -289,13 +342,46 @@
   min-width: 0;
 }
 
+.animax-editor-resource-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
 .animax-editor-resource-title {
+  flex: 0 1 auto;
+  min-width: 0;
   overflow: hidden;
   color: var(--animax-text);
   font-family: var(--animax-mono);
   font-size: 13px;
   font-weight: 700;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.animax-editor-resource-format-tags {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.animax-editor-resource-format-tag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 18px;
+  border: 1px solid var(--animax-control-primary-border);
+  border-radius: 999px;
+  background: var(--animax-control-primary-bg);
+  color: var(--animax-control-primary-text);
+  font-family: var(--animax-mono);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  padding: 0 6px;
   white-space: nowrap;
 }
 
@@ -306,7 +392,7 @@
   height: var(--animax-control-height);
   border: 1px solid var(--animax-line);
   border-radius: var(--animax-control-radius);
-  background: rgba(255, 255, 255, 0.035);
+  background: var(--animax-chip-bg);
   color: var(--animax-control-primary-text);
   cursor: pointer;
   font: inherit;
@@ -317,7 +403,7 @@
 
 .animax-layer-icon-btn:hover {
   border-color: var(--animax-control-primary-border);
-  background: rgba(102, 99, 246, 0.14);
+  background: var(--animax-control-primary-hover-bg);
   color: var(--animax-text);
 }
 
@@ -330,6 +416,38 @@
   margin-top: 4px;
   color: var(--animax-muted);
   font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.animax-editor-resource-check {
+  display: grid;
+  gap: 3px;
+  margin-top: 7px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.45;
+  padding: 7px 9px;
+}
+
+.animax-editor-resource-check.warning {
+  border: 1px solid rgba(180, 83, 9, 0.3);
+  background: rgba(180, 83, 9, 0.1);
+  color: #78350f;
+}
+
+.animax-editor-resource-check.checking {
+  border: 1px solid rgba(147, 197, 253, 0.24);
+  background: rgba(147, 197, 253, 0.08);
+  color: #bfdbfe;
+}
+
+.animax-editor-resource-check.error {
+  overflow: hidden;
+  border: 1px solid rgba(251, 113, 133, 0.28);
+  background: rgba(251, 113, 133, 0.08);
+  color: var(--animax-danger);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -413,8 +531,8 @@
   max-width: 340px;
   border: 1px solid var(--animax-line);
   border-radius: 10px;
-  background: #202025;
-  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.34);
+  background: var(--animax-tooltip-bg);
+  box-shadow: var(--animax-shadow);
   color: var(--animax-text);
   content: attr(data-tooltip);
   font-family: var(--animax-ui);
@@ -508,6 +626,42 @@
   color: var(--layer-chip-state-text);
 }
 
+:root[data-theme='light'] .animax-tool-container .animax-editor-layer-detail {
+  --layer-chip-frame-bg: #f1f5f9;
+  --layer-chip-frame-border: #d7e0ec;
+  --layer-chip-frame-text: #475569;
+  --layer-chip-ref-bg: rgba(29, 78, 216, 0.08);
+  --layer-chip-ref-border: rgba(29, 78, 216, 0.24);
+  --layer-chip-ref-text: #1d4ed8;
+  --layer-chip-parent-bg: rgba(14, 165, 233, 0.09);
+  --layer-chip-parent-border: rgba(14, 116, 144, 0.24);
+  --layer-chip-parent-text: #0369a1;
+  --layer-chip-matte-bg: rgba(245, 158, 11, 0.1);
+  --layer-chip-matte-border: rgba(180, 83, 9, 0.24);
+  --layer-chip-matte-text: #b45309;
+  --layer-chip-font-bg: rgba(16, 185, 129, 0.1);
+  --layer-chip-font-border: rgba(4, 120, 87, 0.24);
+  --layer-chip-font-text: #047857;
+  --layer-chip-3d-bg: rgba(99, 102, 241, 0.09);
+  --layer-chip-3d-border: rgba(67, 56, 202, 0.24);
+  --layer-chip-3d-text: #4338ca;
+  --layer-chip-hidden-bg: rgba(225, 29, 72, 0.08);
+  --layer-chip-hidden-border: rgba(190, 18, 60, 0.22);
+  --layer-chip-hidden-text: #be123c;
+  --layer-chip-stretch-bg: rgba(249, 115, 22, 0.09);
+  --layer-chip-stretch-border: rgba(194, 65, 12, 0.22);
+  --layer-chip-stretch-text: #c2410c;
+  --layer-chip-effect-bg: rgba(192, 38, 211, 0.08);
+  --layer-chip-effect-border: rgba(162, 28, 175, 0.22);
+  --layer-chip-effect-text: #a21caf;
+  --layer-chip-effect-unsupported-bg: rgba(220, 38, 38, 0.08);
+  --layer-chip-effect-unsupported-border: rgba(185, 28, 28, 0.22);
+  --layer-chip-effect-unsupported-text: #b91c1c;
+  --layer-chip-state-bg: #f1f5f9;
+  --layer-chip-state-border: #d7e0ec;
+  --layer-chip-state-text: #475569;
+}
+
 .animax-editor-layer-card.active .animax-editor-layer-chip.ref {
   border-color: color-mix(in srgb, var(--animax-layer-bound-color, #93c5fd) 42%, transparent);
   background: color-mix(in srgb, var(--animax-layer-bound-color, #93c5fd) 14%, transparent);
@@ -522,10 +676,10 @@
 .animax-editor-origin-pill {
   position: relative;
   flex: 0 0 auto;
-  border: 1px solid rgba(129, 126, 255, 0.38);
+  border: 1px solid var(--animax-control-primary-border);
   border-radius: 999px;
-  background: rgba(102, 99, 246, 0.12);
-  color: #c7d2fe;
+  background: var(--animax-control-primary-bg);
+  color: var(--animax-control-primary-text);
   padding: 2px 7px;
   font-family: var(--animax-mono);
   font-size: 11px;
@@ -542,8 +696,8 @@
   max-width: 360px;
   border: 1px solid var(--animax-line);
   border-radius: 10px;
-  background: #202025;
-  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.34);
+  background: var(--animax-tooltip-bg);
+  box-shadow: var(--animax-shadow);
   color: var(--animax-text);
   content: attr(data-tooltip);
   font-family: var(--animax-ui);
@@ -615,11 +769,9 @@
 }
 
 .animax-editor-layer-bounds-toggle:hover {
-  border-color: rgba(147, 197, 253, 0.62);
-  background:
-    linear-gradient(180deg, rgba(147, 197, 253, 0.08), rgba(102, 99, 246, 0.06)),
-    rgba(129, 126, 255, 0.12);
-  color: #f4f7ff;
+  border-color: var(--animax-accent);
+  background: var(--animax-control-primary-hover-bg);
+  color: var(--animax-control-primary-text);
   transform: translateY(-1px);
 }
 
@@ -635,7 +787,7 @@
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--animax-layer-bound-color, #93c5fd) 22%, transparent) inset,
     0 10px 28px color-mix(in srgb, var(--animax-layer-bound-color, #93c5fd) 22%, transparent);
-  color: #ffffff;
+  color: var(--animax-control-primary-text);
 }
 
 .animax-editor-layer-bounds-icon {
@@ -644,7 +796,7 @@
   width: 16px;
   height: 16px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--animax-chip-bg);
   color: currentColor;
   font-size: 12px;
   font-weight: 800;
@@ -680,8 +832,10 @@
   padding: 6px;
   border: 1px solid var(--animax-line);
   border-radius: 12px;
-  background: #1b1b1f;
-  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.34);
+  background: var(--animax-popover-bg);
+  box-shadow: var(--animax-popover-shadow);
+  color: var(--animax-text);
+  backdrop-filter: blur(12px);
 }
 
 .animax-resource-replace-menu.drop-up {
@@ -704,7 +858,7 @@
 }
 
 .animax-resource-replace-menu button:hover {
-  background: rgba(102, 99, 246, 0.14);
+  background: var(--animax-popover-hover-bg);
 }
 
 .animax-resource-replace-menu strong {
@@ -737,10 +891,11 @@
   border: 1px solid var(--animax-line);
   border-radius: var(--radius-sm);
   background:
-    linear-gradient(45deg, rgba(255, 255, 255, 0.04) 25%, transparent 25%),
-    linear-gradient(-45deg, rgba(255, 255, 255, 0.04) 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, rgba(255, 255, 255, 0.04) 75%),
-    linear-gradient(-45deg, transparent 75%, rgba(255, 255, 255, 0.04) 75%);
+    linear-gradient(45deg, var(--animax-checker-mark) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--animax-checker-mark) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--animax-checker-mark) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--animax-checker-mark) 75%);
+  background-color: var(--animax-checker-bg);
   background-position:
     0 0,
     0 8px,
@@ -764,7 +919,7 @@
 }
 
 video.animax-editor-resource-thumb {
-  background: #050505;
+  background: var(--animax-checker-bg);
   object-fit: cover;
   pointer-events: none;
 }
@@ -777,10 +932,10 @@ video.animax-editor-resource-thumb {
   width: 18px;
   height: 18px;
   place-items: center;
-  border: 1px solid rgba(255, 255, 255, 0.28);
+  border: 1px solid color-mix(in srgb, var(--animax-line) 66%, transparent);
   border-radius: 999px;
-  background: rgba(0, 0, 0, 0.58);
-  color: #fff;
+  background: var(--animax-popover-bg);
+  color: var(--animax-text);
   font-size: 9px;
   line-height: 1;
 }
@@ -797,21 +952,21 @@ video.animax-editor-resource-thumb {
 .animax-editor-resource-kind.image {
   border-color: rgba(56, 189, 248, 0.36);
   background: rgba(56, 189, 248, 0.1);
-  color: #bae6fd;
+  color: var(--animax-info-text);
 }
 
 .animax-editor-resource-summary-item.video,
 .animax-editor-resource-kind.video {
   border-color: rgba(45, 212, 191, 0.34);
   background: rgba(20, 184, 166, 0.1);
-  color: #99f6e4;
+  color: var(--animax-success-text);
 }
 
 .animax-editor-resource-summary-item.font,
 .animax-editor-resource-kind.font {
   border-color: rgba(52, 211, 153, 0.34);
   background: rgba(16, 185, 129, 0.1);
-  color: #a7f3d0;
+  color: var(--animax-success-text);
 }
 
 .animax-editor-resource-summary-item.image strong,
@@ -820,12 +975,59 @@ video.animax-editor-resource-thumb {
   color: currentColor;
 }
 
+:root[data-theme='light'] .animax-tool-container .animax-editor-resource-summary-item.image,
+:root[data-theme='light'] .animax-tool-container .animax-editor-resource-kind.image,
+:root[data-theme='light'] .animax-tool-container .animax-editor-layer-kind.image,
+:root[data-theme='light'] .animax-tool-container .animax-editor-layer-kind.camera {
+  border-color: rgba(14, 116, 144, 0.28);
+  background: rgba(14, 165, 233, 0.1);
+  color: #0369a1;
+}
+
+:root[data-theme='light'] .animax-tool-container .animax-editor-resource-summary-item.video,
+:root[data-theme='light'] .animax-tool-container .animax-editor-resource-kind.video,
+:root[data-theme='light'] .animax-tool-container .animax-editor-layer-kind.video {
+  border-color: rgba(15, 118, 110, 0.28);
+  background: rgba(20, 184, 166, 0.1);
+  color: #0f766e;
+}
+
+:root[data-theme='light'] .animax-tool-container .animax-editor-resource-summary-item.font,
+:root[data-theme='light'] .animax-tool-container .animax-editor-resource-kind.font,
+:root[data-theme='light'] .animax-tool-container .animax-editor-layer-kind.text {
+  border-color: rgba(4, 120, 87, 0.28);
+  background: rgba(16, 185, 129, 0.1);
+  color: #047857;
+}
+
+:root[data-theme='light'] .animax-tool-container .animax-editor-layer-kind.precomp,
+:root[data-theme='light'] .animax-tool-container .animax-editor-layer-kind.null,
+:root[data-theme='light'] .animax-tool-container .animax-editor-layer-kind.unknown,
+:root[data-theme='light'] .animax-tool-container .animax-editor-resource-format-tag,
+:root[data-theme='light'] .animax-tool-container .animax-editor-origin-pill {
+  border-color: var(--animax-control-primary-border);
+  background: var(--animax-control-primary-bg);
+  color: var(--animax-control-primary-text);
+}
+
+:root[data-theme='light'] .animax-tool-container .animax-editor-layer-kind.solid,
+:root[data-theme='light'] .animax-tool-container .animax-editor-layer-kind.audio {
+  border-color: rgba(180, 83, 9, 0.28);
+  background: rgba(245, 158, 11, 0.11);
+  color: #b45309;
+}
+
+:root[data-theme='light'] .animax-tool-container .animax-editor-layer-kind.shape {
+  border-color: rgba(190, 24, 93, 0.25);
+  background: rgba(236, 72, 153, 0.09);
+  color: #be185d;
+}
+
 .animax-editor-resource-card {
   min-height: 82px;
-  border-color: rgba(148, 163, 184, 0.14);
+  border-color: var(--animax-card-border);
   border-radius: 12px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.012)), #15161b;
+  background: var(--animax-card-bg);
   transition:
     border-color 0.15s ease,
     background 0.15s ease,
@@ -834,10 +1036,9 @@ video.animax-editor-resource-thumb {
 }
 
 .animax-editor-resource-card:hover {
-  border-color: rgba(148, 163, 184, 0.26);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.052), rgba(255, 255, 255, 0.018)), #18191e;
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.18);
+  border-color: var(--animax-line2);
+  background: var(--animax-card-hover-bg);
+  box-shadow: var(--animax-shadow);
 }
 
 .animax-editor-layer-card {
@@ -849,30 +1050,28 @@ video.animax-editor-resource-thumb {
 }
 
 .animax-editor-resource-title {
-  color: rgba(248, 250, 252, 0.94);
+  color: var(--animax-text);
   font-size: 14px;
 }
 
 .animax-editor-resource-detail {
-  color: rgba(203, 213, 225, 0.7);
+  color: var(--animax-muted);
 }
 
 .animax-editor-resource-size {
-  color: rgba(203, 213, 225, 0.62);
+  color: var(--animax-muted2);
 }
 
 .animax-editor-resource-thumb-btn {
-  border-color: rgba(148, 163, 184, 0.18);
+  border-color: var(--animax-card-border);
   border-radius: 12px;
-  background-color: #111217;
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.035) inset;
+  background-color: var(--animax-input-bg);
+  box-shadow: none;
 }
 
 .animax-editor-resource-thumb-btn:hover {
-  border-color: rgba(129, 126, 255, 0.42);
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.04) inset,
-    0 10px 24px rgba(0, 0, 0, 0.24);
+  border-color: var(--animax-control-primary-border);
+  box-shadow: var(--animax-shadow);
 }
 
 .animax-resource-replace-trigger {
@@ -887,29 +1086,27 @@ video.animax-editor-resource-thumb {
 
 .animax-editor-text-header {
   padding: 0 12px 4px;
-  color: rgba(203, 213, 225, 0.62);
+  color: var(--animax-muted);
 }
 
 .animax-editor-text-row {
   min-height: 64px;
-  border-color: rgba(148, 163, 184, 0.14);
+  border-color: var(--animax-card-border);
   border-radius: 12px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.012)), #15161b;
+  background: var(--animax-card-bg);
   padding: 10px 12px;
 }
 
 .animax-editor-text-row:hover {
-  border-color: rgba(148, 163, 184, 0.26);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.052), rgba(255, 255, 255, 0.018)), #18191e;
+  border-color: var(--animax-line2);
+  background: var(--animax-card-hover-bg);
 }
 
 .animax-editor-text-row .animax-editor-text-input {
   height: 38px;
-  border-color: rgba(148, 163, 184, 0.2);
+  border-color: var(--animax-line);
   border-radius: 10px;
-  background: #101116;
+  background: var(--animax-input-bg);
 }
 
 .animax-editor-text-row .animax-editor-btn.action {
@@ -949,7 +1146,7 @@ video.animax-editor-resource-thumb {
   align-items: center;
   justify-content: center;
   padding: 32px;
-  background: rgba(0, 0, 0, 0.72);
+  background: color-mix(in srgb, var(--bg-app) 72%, transparent);
 }
 
 .animax-editor-image-modal img {
@@ -958,11 +1155,11 @@ video.animax-editor-resource-thumb {
   border: 1px solid var(--animax-line);
   border-radius: var(--radius-md);
   background:
-    linear-gradient(45deg, #111 25%, transparent 25%),
-    linear-gradient(-45deg, #111 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, #111 75%),
-    linear-gradient(-45deg, transparent 75%, #111 75%);
-  background-color: #050505;
+    linear-gradient(45deg, var(--animax-checker-mark) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--animax-checker-mark) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--animax-checker-mark) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--animax-checker-mark) 75%);
+  background-color: var(--animax-checker-bg);
   background-position:
     0 0,
     0 12px,
@@ -976,7 +1173,7 @@ video.animax-editor-resource-thumb {
   max-height: 88vh;
   border: 1px solid var(--animax-line);
   border-radius: var(--radius-md);
-  background: #050505;
+  background: var(--animax-checker-bg);
   box-shadow: var(--animax-shadow);
 }
 

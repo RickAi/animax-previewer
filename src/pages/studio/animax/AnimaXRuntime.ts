@@ -4,6 +4,7 @@ import { AnimaXVideoModuleUrl } from '@lynx-js/animax-video';
 
 const RUNTIME_RESOURCE_CACHE_DB = 'animax-runtime-resources';
 const RUNTIME_RESOURCE_CACHE_STORE = 'resources';
+const ANIMAX_FONT_LOAD_TIMEOUT_MS = 60_000;
 const ANIMAX_DEFAULT_FONT_FAMILY = 'Noto Sans SC';
 const ANIMAX_FONT_CONFIG: AnimaXFontConfig = {
   defaultFamily: ANIMAX_DEFAULT_FONT_FAMILY,
@@ -24,6 +25,10 @@ type RuntimeElement = {
 export interface AnimaXRuntimeStatus {
   ready: boolean;
   fontLoaded: boolean;
+  fontLoading: boolean;
+  fontTimedOut: boolean;
+  fontElapsedMs: number;
+  fontTimeoutMs: number;
   textraModuleLoaded: boolean;
   videoModuleLoaded: boolean;
   textraModuleSupported: boolean;
@@ -39,6 +44,7 @@ export interface AnimaXRuntimeStatus {
 
 interface AnimaXRuntimeInitOptions {
   onLog?: (line: string) => void;
+  onStatus?: (status: AnimaXRuntimeStatus) => void;
 }
 
 interface CachedRuntimeResource {
@@ -238,6 +244,58 @@ const configureRuntimeFonts = async (
   return loaded;
 };
 
+const configureRuntimeFontsWithTimeout = async (
+  configureFonts: NonNullable<RuntimeElement['configureFonts']>,
+  onLog: AnimaXRuntimeInitOptions['onLog'],
+) =>
+  new Promise<{ loaded: boolean; timedOut: boolean; elapsedMs: number }>((resolve) => {
+    const startedAt = getNow();
+    let settled = false;
+
+    const finish = (result: { loaded: boolean; timedOut: boolean; elapsedMs: number }) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timer);
+      resolve(result);
+    };
+
+    const timer = window.setTimeout(() => {
+      emitLog(
+        onLog,
+        `[警告] 运行时初始化：字体注册超过 ${formatMs(
+          ANIMAX_FONT_LOAD_TIMEOUT_MS,
+        )}，播放器暂停加载，请重试`,
+      );
+      finish({
+        loaded: false,
+        timedOut: true,
+        elapsedMs: getNow() - startedAt,
+      });
+    }, ANIMAX_FONT_LOAD_TIMEOUT_MS);
+
+    configureRuntimeFonts(configureFonts, onLog)
+      .then((loaded) => {
+        finish({
+          loaded,
+          timedOut: false,
+          elapsedMs: getNow() - startedAt,
+        });
+      })
+      .catch((error) => {
+        emitLog(
+          onLog,
+          `[警告] 运行时初始化：字体注册异常：${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+        finish({
+          loaded: false,
+          timedOut: false,
+          elapsedMs: getNow() - startedAt,
+        });
+      });
+  });
+
 const loadRuntimeWasmModule = async (
   url: string,
   label: string,
@@ -268,8 +326,11 @@ export function ensureAnimaXRuntimeInitialized(options: AnimaXRuntimeInitOptions
     runtimeInitializationPromise = (async () => {
       const startedAt = getNow();
       const runtimeElement = AnimaXViewElement as unknown as RuntimeElement;
-      const warnings: string[] = [];
+      const runtimeCapabilityWarnings: string[] = [];
       let fontLoaded = false;
+      let fontLoading = false;
+      let fontTimedOut = false;
+      let fontElapsedMs = 0;
       let textraModuleLoaded = false;
       let videoModuleLoaded = false;
       let textraModuleSupported = false;
@@ -284,31 +345,83 @@ export function ensureAnimaXRuntimeInitialized(options: AnimaXRuntimeInitOptions
 
       emitLog(
         options.onLog,
-        '[信息] 运行时初始化：并行准备字体、Textra 与视频模块，完成前不挂载播放器',
+        '[信息] 运行时初始化：并行准备字体、Textra 与视频模块，全部完成后展示动画',
       );
 
       const fontSupported = typeof runtimeElement.configureFonts === 'function';
       if (!fontSupported) {
-        warnings.push('当前 AnimaX 运行时未暴露 configureFonts');
-        emitLog(options.onLog, `[警告] 运行时初始化：${warnings[warnings.length - 1]}`);
+        runtimeCapabilityWarnings.push('当前 AnimaX 运行时未暴露 configureFonts');
+        emitLog(
+          options.onLog,
+          `[警告] 运行时初始化：${runtimeCapabilityWarnings[runtimeCapabilityWarnings.length - 1]}`,
+        );
       }
 
       textraModuleSupported = typeof runtimeElement.loadTextraModule === 'function';
       if (!textraModuleSupported) {
-        warnings.push('当前 AnimaX 运行时未暴露 loadTextraModule');
-        emitLog(options.onLog, `[警告] 运行时初始化：${warnings[warnings.length - 1]}`);
+        runtimeCapabilityWarnings.push('当前 AnimaX 运行时未暴露 loadTextraModule');
+        emitLog(
+          options.onLog,
+          `[警告] 运行时初始化：${runtimeCapabilityWarnings[runtimeCapabilityWarnings.length - 1]}`,
+        );
       }
 
       videoModuleSupported = typeof runtimeElement.loadVideoModule === 'function';
       if (!videoModuleSupported) {
-        warnings.push('当前 AnimaX 运行时未暴露 loadVideoModule');
-        emitLog(options.onLog, `[警告] 运行时初始化：${warnings[warnings.length - 1]}`);
+        runtimeCapabilityWarnings.push('当前 AnimaX 运行时未暴露 loadVideoModule');
+        emitLog(
+          options.onLog,
+          `[警告] 运行时初始化：${runtimeCapabilityWarnings[runtimeCapabilityWarnings.length - 1]}`,
+        );
       }
 
-      const [fontResult, textraModuleResult, videoModuleResult] = await Promise.all([
-        fontSupported && runtimeElement.configureFonts
-          ? configureRuntimeFonts(runtimeElement.configureFonts.bind(runtimeElement), options.onLog)
-          : Promise.resolve(false),
+      const createStatus = (): AnimaXRuntimeStatus => {
+        const statusWarnings = [...runtimeCapabilityWarnings];
+        if (fontTimedOut) {
+          statusWarnings.push(`字体加载超过 ${formatMs(ANIMAX_FONT_LOAD_TIMEOUT_MS)}`);
+        } else if (fontSupported && !fontLoading && !fontLoaded) {
+          statusWarnings.push('字体加载失败');
+        }
+        if (!textraModuleLoaded) statusWarnings.push('Textra 模块加载失败');
+        if (!videoModuleLoaded) statusWarnings.push('视频模块加载失败');
+
+        return {
+          ready: fontLoaded && textraModuleLoaded && videoModuleLoaded,
+          fontLoaded,
+          fontLoading,
+          fontTimedOut,
+          fontElapsedMs,
+          fontTimeoutMs: ANIMAX_FONT_LOAD_TIMEOUT_MS,
+          textraModuleLoaded,
+          videoModuleLoaded,
+          textraModuleSupported,
+          videoModuleSupported,
+          fontCount,
+          textraModuleBytes,
+          videoModuleBytes,
+          textraModuleFromCache,
+          videoModuleFromCache,
+          elapsedMs: getNow() - startedAt,
+          warnings: statusWarnings,
+        };
+      };
+
+      let fontPromise: Promise<void> = Promise.resolve();
+      if (fontSupported && runtimeElement.configureFonts) {
+        fontLoading = true;
+        fontPromise = configureRuntimeFontsWithTimeout(
+          runtimeElement.configureFonts.bind(runtimeElement),
+          options.onLog,
+        ).then((fontResult) => {
+          fontLoaded = fontResult.loaded;
+          fontLoading = false;
+          fontTimedOut = fontResult.timedOut;
+          fontElapsedMs = fontResult.elapsedMs;
+          fontCount = fontLoaded ? ANIMAX_FONT_CONFIG.fonts.length : 0;
+        });
+      }
+
+      const [textraModuleResult, videoModuleResult] = await Promise.all([
         textraModuleSupported && runtimeElement.loadTextraModule
           ? loadRuntimeWasmModule(
               textraModuleUrl,
@@ -325,10 +438,9 @@ export function ensureAnimaXRuntimeInitialized(options: AnimaXRuntimeInitOptions
               options.onLog,
             )
           : Promise.resolve<Awaited<ReturnType<typeof loadRuntimeWasmModule>> | null>(null),
+        fontPromise,
       ]);
 
-      fontLoaded = fontResult;
-      fontCount = fontLoaded ? ANIMAX_FONT_CONFIG.fonts.length : 0;
       textraModuleLoaded = Boolean(textraModuleResult?.loaded);
       textraModuleBytes = textraModuleResult?.bytes ?? 0;
       textraModuleFromCache = textraModuleResult?.fromCache ?? false;
@@ -336,34 +448,18 @@ export function ensureAnimaXRuntimeInitialized(options: AnimaXRuntimeInitOptions
       videoModuleBytes = videoModuleResult?.bytes ?? 0;
       videoModuleFromCache = videoModuleResult?.fromCache ?? false;
 
-      if (!fontLoaded) warnings.push('字体加载失败');
-      if (!textraModuleLoaded) warnings.push('Textra 模块加载失败');
-      if (!videoModuleLoaded) warnings.push('视频模块加载失败');
-
-      const ready = fontLoaded && textraModuleLoaded && videoModuleLoaded;
-      const elapsedMs = getNow() - startedAt;
+      const status = createStatus();
       emitLog(
         options.onLog,
-        ready
-          ? `[信息] 运行时初始化：全部完成，${formatMs(elapsedMs)}`
-          : `[错误] 运行时初始化：未就绪，${warnings.join('；') || '未知错误'}`,
+        status.ready
+          ? status.warnings.length > 0
+            ? `[警告] 运行时初始化：播放器可用，但存在异常：${status.warnings.join('；')}`
+            : `[信息] 运行时初始化：必要模块完成，${formatMs(status.elapsedMs)}`
+          : `[错误] 运行时初始化：未就绪，${status.warnings.join('；') || '未知错误'}`,
       );
 
-      return {
-        ready,
-        fontLoaded,
-        textraModuleLoaded,
-        videoModuleLoaded,
-        textraModuleSupported,
-        videoModuleSupported,
-        fontCount,
-        textraModuleBytes,
-        videoModuleBytes,
-        textraModuleFromCache,
-        videoModuleFromCache,
-        elapsedMs,
-        warnings,
-      };
+      if (!status.ready) runtimeInitializationPromise = null;
+      return status;
     })().catch((error) => {
       runtimeInitializationPromise = null;
       throw error;

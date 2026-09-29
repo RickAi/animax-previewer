@@ -1,8 +1,37 @@
 import JSZip from 'jszip';
+import type { ResourceEdit } from '../toolTypes';
 
 interface RepackOptions {
   jsonText: string;
   sourceUrl: string;
+  resourceEdits?: Record<string, ResourceEdit>;
+}
+
+interface DownloadBundleOptions {
+  sourceUrl: string;
+  currentAnimation?: RepackOptions;
+}
+
+type PickedDirectorySaveResult = 'directory' | 'fallback' | 'cancelled';
+
+interface PickedDirectoryWritable {
+  write: (blob: Blob) => Promise<void>;
+  close: () => Promise<void>;
+}
+
+interface PickedDirectoryFileHandle {
+  createWritable: () => Promise<PickedDirectoryWritable>;
+}
+
+interface PickedDirectoryHandle {
+  getFileHandle: (
+    fileName: string,
+    options?: { create?: boolean },
+  ) => Promise<PickedDirectoryFileHandle>;
+}
+
+interface DirectoryDownloadDependencies {
+  showDirectoryPicker?: () => Promise<PickedDirectoryHandle>;
 }
 
 export interface RepackResult {
@@ -139,7 +168,11 @@ function resolveLottieAssetUrl(sourceUrl: string, u: string, p: string) {
   return resolveResourceUrl(sourceUrl, joined);
 }
 
-function getJsonFileName(sourceUrl: string) {
+function getJsonFileName(sourceUrl: string, animationName?: string) {
+  const normalizedAnimationName = sanitizeFileStem(animationName || '', '');
+  const nameFromJson = normalizedAnimationName.replace(/\.(lottie\.json|json)$/i, '').trim();
+  if (nameFromJson) return `${nameFromJson}.json`;
+
   try {
     const url = new URL(sourceUrl);
     const baseName = decodeURIComponent(url.pathname.split('/').filter(Boolean).pop() ?? '');
@@ -155,6 +188,30 @@ function getZipFileName(jsonFileName: string) {
   return `${jsonFileName.replace(/\.(lottie\.json|json)$/i, '') || 'animation'}_repack.zip`;
 }
 
+function getResourceEdit(
+  resourceEdits: Record<string, ResourceEdit> | undefined,
+  kind: ResourceEdit['kind'],
+  id: string,
+) {
+  return resourceEdits?.[`${kind}:${id}`];
+}
+
+function normalizePackPath(value: string, fallbackDir: string, fileName: string) {
+  const normalized = value.trim().replace(/\\/g, '/').replace(/^\/+/, '');
+  if (normalized) return normalized;
+  return `${fallbackDir.replace(/\/?$/, '/')}${fileName}`;
+}
+
+function splitPackPath(packPath: string) {
+  const normalized = packPath.replace(/\\/g, '/').replace(/^\/+/, '');
+  const index = normalized.lastIndexOf('/');
+  if (index < 0) return { dir: '', fileName: normalized };
+  return {
+    dir: `${normalized.slice(0, index + 1)}`,
+    fileName: normalized.slice(index + 1),
+  };
+}
+
 async function fetchResourceBlob(url: string) {
   const response = await fetch(url);
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -164,9 +221,34 @@ async function fetchResourceBlob(url: string) {
   };
 }
 
+async function fetchJsonText(url: string) {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  return response.text();
+}
+
+export async function createAnimaXDownloadBundle(
+  options: DownloadBundleOptions,
+): Promise<RepackResult> {
+  const sourceUrl = options.sourceUrl.trim();
+  if (!sourceUrl) throw new Error('请输入 Lottie 链接');
+
+  const currentAnimation = options.currentAnimation;
+  if (currentAnimation?.sourceUrl.trim() === sourceUrl && currentAnimation.jsonText.trim()) {
+    return createAnimaXRepack({ ...currentAnimation, sourceUrl });
+  }
+
+  const jsonText = await fetchJsonText(sourceUrl);
+  return createAnimaXRepack({
+    jsonText,
+    sourceUrl,
+  });
+}
+
 export async function createAnimaXRepack(options: RepackOptions): Promise<RepackResult> {
   const parsed = JSON.parse(options.jsonText) as any;
   const repackedJson = JSON.parse(JSON.stringify(parsed)) as any;
+  const animationName = typeof parsed?.nm === 'string' ? parsed.nm : '';
   const zip = new JSZip();
   const warnings: string[] = [];
 
@@ -184,6 +266,18 @@ export async function createAnimaXRepack(options: RepackOptions): Promise<Repack
       const p = typeof asset.p === 'string' ? asset.p : '';
       const u = typeof asset.u === 'string' ? asset.u : '';
       if (!id || !p) continue;
+
+      const edit = getResourceEdit(options.resourceEdits, 'image', id);
+      if (edit?.file) {
+        const packPath = normalizePackPath(edit.packPath ?? '', 'images', edit.fileName);
+        const { dir, fileName } = splitPackPath(packPath);
+        zip.file(packPath, await edit.file.arrayBuffer());
+        asset.u = dir;
+        asset.p = fileName;
+        asset.e = 0;
+        downloadedImages += 1;
+        continue;
+      }
 
       if (isBase64Resource(p) || isBase64Resource(`${u}${p}`)) {
         skippedBase64Images += 1;
@@ -219,6 +313,19 @@ export async function createAnimaXRepack(options: RepackOptions): Promise<Repack
       const p = typeof video.p === 'string' ? video.p : '';
       const u = typeof video.u === 'string' ? video.u : '';
       if (!id || !p) continue;
+
+      const edit = getResourceEdit(options.resourceEdits, 'video', id);
+      if (edit?.file) {
+        const packPath = normalizePackPath(edit.packPath ?? '', 'videos', edit.fileName);
+        const { dir, fileName } = splitPackPath(packPath);
+        zip.file(packPath, await edit.file.arrayBuffer());
+        video.u = dir;
+        video.p = fileName;
+        video.e = 0;
+        video.sz = edit.file.size;
+        downloadedVideos += 1;
+        continue;
+      }
 
       if (isBase64Resource(p) || isBase64Resource(`${u}${p}`)) {
         skippedBase64Videos += 1;
@@ -280,7 +387,7 @@ export async function createAnimaXRepack(options: RepackOptions): Promise<Repack
     }
   }
 
-  const jsonFileName = getJsonFileName(options.sourceUrl);
+  const jsonFileName = getJsonFileName(options.sourceUrl, animationName);
   zip.file(jsonFileName, JSON.stringify(repackedJson));
   const blob = await zip.generateAsync({ type: 'blob' });
 
@@ -304,4 +411,27 @@ export function downloadBlob(blob: Blob, fileName: string) {
   link.download = fileName;
   link.click();
   URL.revokeObjectURL(url);
+}
+
+export async function saveBlobToPickedDirectory(
+  blob: Blob,
+  fileName: string,
+  dependencies: DirectoryDownloadDependencies = window as unknown as DirectoryDownloadDependencies,
+): Promise<PickedDirectorySaveResult> {
+  if (!dependencies.showDirectoryPicker) {
+    downloadBlob(blob, fileName);
+    return 'fallback';
+  }
+
+  try {
+    const directory = await dependencies.showDirectoryPicker();
+    const fileHandle = await directory.getFileHandle(fileName, { create: true });
+    const writable = await fileHandle.createWritable();
+    await writable.write(blob);
+    await writable.close();
+    return 'directory';
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') return 'cancelled';
+    throw error;
+  }
 }
