@@ -11,3 +11,14 @@ assert.equal(denied.status, 403);
 const anonymous = await worker.fetch(new Request('https://example.com/api/files'), { DB: {}, FILES: {} });
 assert.equal(anonymous.status, 401);
 console.log('Storage validation, session and cross-origin checks passed');
+
+let touchedR2 = false;
+const quotaExceeded = { prepare: () => ({ bind: () => ({ first: async () => null }) }) };
+const limited = await worker.fetch(new Request('https://example.com/api/objects/12345678-1234-1234-1234-123456789012/test.json'), { DB: quotaExceeded, FILES: { get: () => { touchedR2 = true; } } });
+assert.equal(limited.status, 429);
+assert.equal(touchedR2, false, 'Quota rejection must happen before any billable R2 read');
+const quotaUnavailable = { prepare: () => { throw new Error('D1 unavailable'); } };
+const failedClosed = await worker.fetch(new Request('https://example.com/api/objects/12345678-1234-1234-1234-123456789012/test.json'), { DB: quotaUnavailable, FILES: { get: () => { touchedR2 = true; } } });
+assert.equal(failedClosed.status, 500);
+assert.equal(touchedR2, false);
+console.log('Quota exhaustion and database failures reject before R2 access');

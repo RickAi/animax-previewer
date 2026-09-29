@@ -36,7 +36,7 @@ async function reserve(db, key, size, maxBytes, maxCount) {
   const result = await db.prepare(`INSERT INTO quotas (id, bytes, count) VALUES (?, ?, 1)
     ON CONFLICT(id) DO UPDATE SET bytes = bytes + excluded.bytes, count = count + 1
     WHERE bytes + excluded.bytes <= ? AND count < ? RETURNING id`).bind(key, size, maxBytes, maxCount).first();
-  if (!result) fail('上传额度已用完，请稍后再试或联系站点管理员', 429);
+  if (!result) fail('免费使用额度已达到站点上限，请稍后再试或联系管理员', 429);
 }
 
 export default {
@@ -54,6 +54,7 @@ export default {
       if (!env.DB || !env.FILES) return json({ error: '云端存储尚未配置' }, 503);
       const objectMatch = path.match(/^\/api\/objects\/([0-9a-f-]{36})\/[^/]+$/);
       if (objectMatch && ['GET', 'HEAD'].includes(request.method)) {
+        await reserve(env.DB, `reads:${new Date().toISOString().slice(0, 7)}`, 0, 0, 1000000);
         const object = await env.FILES.get(objectMatch[1]);
         if (!object) return json({ error: '文件不存在' }, 404);
         const headers = new Headers(); object.writeHttpMetadata(headers);

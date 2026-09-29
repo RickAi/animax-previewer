@@ -116,9 +116,18 @@ public FFmpeg 0.12.9 core from unpkg on demand.
   cookies loses access to that list; saved share links continue working. Hiding a
   record is reversible in D1 and does not delete the file or break its links.
 - Upload limits: 25 MiB/file, 200 MiB and 1,000 files/IP/day, 8 GiB lifetime
-  storage reservation and 100,000 files for this app. Failed writes can consume
+  storage reservation and 100,000 files for this app. R2 reads stop at 1,000,000
+  operations/calendar month (including missing files and HEAD requests). All
+  quota reservations are atomic D1 writes and happen before R2 access. If D1
+  is unavailable or quota-exhausted, the request fails closed without using R2.
+  Keep Workers/D1 on the Free plan and the bucket private, with no public R2
+  domain, lifecycle tier transitions, S3 credentials or additional writers. Failed writes can consume
   reservation, conservatively. These are application limits, **not a Cloudflare
-  billing cap**; read requests and other account usage can still incur charges.
+  billing cap**: they bound this application below the current R2 free tier,
+  but other applications, direct console/API usage, plan changes, or pricing
+  changes are outside this app’s control. R2 itself does not offer a $0 stop
+  switch. The account-wide absolute guarantee requires not using a metered R2
+  subscription.
 
 In Cloudflare, connect `RickAi/animax-previewer`, use `npm run build` as the build
 command and `npm run deploy` as the deploy command. Disable preview builds so
