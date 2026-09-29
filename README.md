@@ -146,5 +146,5 @@ npx wrangler dev --port 8795 --inspector-port 9395
 ```
 
 `npm run dev` alone only serves the frontend. Cloud uploads require the Worker.
-Existing GitHub Pages deployment remains a static preview; use the Cloudflare
-site for persistent uploads.
+The existing GitHub Pages address redirects to the Cloudflare site, preserving
+share query parameters. Production: https://animax-previewer.yongbiaoai.workers.dev/

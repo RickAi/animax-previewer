@@ -73,6 +73,9 @@
       }
     </style>
     <script>
+      if (window.location.hostname === 'rickai.github.io') {
+        window.location.replace('https://animax-previewer.yongbiaoai.workers.dev/' + window.location.search + window.location.hash);
+      }
       if (window.location.protocol === 'file:') {
         const devUrl = 'http://127.0.0.1:5173/';
         const showLauncher = () => {
