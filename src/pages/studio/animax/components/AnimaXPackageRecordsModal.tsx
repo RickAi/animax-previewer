@@ -83,7 +83,7 @@ export const AnimaXPackageRecordsModal: React.FC = () => {
         <div className="animax-modal-head">
           <div>
             <div className="t">打包记录</div>
-            <div className="animax-repack-subtitle">上传后自动保存到云端；仅显示当前浏览器会话的记录。清除 Cookie 后将无法找回列表，请保留分享链接。</div>
+            <div className="animax-repack-subtitle">上传后自动保存到云端；仅显示当前浏览器会话的记录。清除浏览器站点数据后将无法找回列表，请保留分享链接。</div>
           </div>
           <button
             type="button"

@@ -112,8 +112,8 @@ public FFmpeg 0.12.9 core from unpkg on demand.
   in the browser; resources are uploaded first and their URLs written into JSON.
 - Uploaded files are accessible to anyone holding their unpredictable URL. There
   is no public file index. Do not upload confidential content.
-- Records belong to a random HttpOnly browser cookie, not a user account. Clearing
-  cookies loses access to that list; saved share links continue working. Hiding a
+- Records belong to an anonymous browser identity, not a user account. Clearing
+  site data loses access to that list; saved share links continue working. Hiding a
   record is reversible in D1 and does not delete the file or break its links.
 - Upload limits: 20 MiB/file, 200 MiB and 1,000 files per browser session AND per IP/day (Asia/Shanghai midnight reset), 8 GiB total
   storage reservation and 100,000 files for this app. An additional backend cap rejects uploads that would exceed 10,000,000,000 bytes of total uploads per Shanghai calendar month; existing uploads are backfilled. Monthly rollover does not reset the lifetime storage cap. R2 reads stop at 1,000,000
