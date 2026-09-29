@@ -11,7 +11,7 @@ const ANIMAX_FONT_CONFIG: AnimaXFontConfig = {
   fonts: [
     {
       family: ANIMAX_DEFAULT_FONT_FAMILY,
-      url: 'https://cdn.jsdelivr.net/gh/notofonts/noto-cjk@main/Sans/OTF/SimplifiedChinese/NotoSansCJKsc-Regular.otf',
+      url: 'https://animax-previewer.yongbiaoai.workers.dev/api/objects/3510b866-ec85-4a39-8599-8629ad72a2e5/dce0b2147ad8-NotoSansCJKsc-Regular.otf',
     },
   ],
 };

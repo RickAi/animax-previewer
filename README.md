@@ -33,7 +33,7 @@ The package versions are currently pinned to `0.1.0-alpha.0` because this is a p
 
 ## Public Samples
 
-The checked-in samples under `public/samples/` are exported AnimaX/Lottie examples, including vector-only animations, image-backed animations, text/image compositions, and video-backed animations. Their related `images/` and `videos/` folders are checked in beside each JSON file so the samples can run on GitHub Pages without private infrastructure.
+The checked-in samples under `public/samples/` are exported AnimaX/Lottie examples, including vector-only animations, image-backed animations, text/image compositions, and video-backed animations. These legacy files remain available, but the default and random examples now use the 17 Kal previewer examples mirrored in R2, including 23 image, video and font dependencies. Their JSON resource URLs all point to this site. R2 renewal is cancelled and scheduled to end on October 29, 2026; these links depend on R2 remaining available.
 
 The internal sample URLs used by the original private previewer are intentionally not copied into this public repository. Many of those upstream examples are hosted on internal or company CDN/TOS domains and may include assets that should not be redistributed in an open-source repo.
 
