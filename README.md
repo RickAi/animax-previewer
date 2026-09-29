@@ -116,7 +116,7 @@ public FFmpeg 0.12.9 core from unpkg on demand.
   cookies loses access to that list; saved share links continue working. Hiding a
   record is reversible in D1 and does not delete the file or break its links.
 - Upload limits: 20 MiB/file, 200 MiB and 1,000 files per browser session AND per IP/day (Asia/Shanghai midnight reset), 8 GiB lifetime
-  storage reservation and 100,000 files for this app. R2 reads stop at 1,000,000
+  storage reservation and 100,000 files for this app. An additional backend cap rejects uploads that would exceed 10,000,000,000 bytes of total uploads per Shanghai calendar month; existing uploads are backfilled. Monthly rollover does not reset the lifetime storage cap. R2 reads stop at 1,000,000
   operations/calendar month (including missing files and HEAD requests). All
   quota reservations are atomic D1 writes and happen before R2 access. If D1
   is unavailable or quota-exhausted, the request fails closed without using R2.

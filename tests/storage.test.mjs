@@ -24,13 +24,13 @@ assert.equal(touchedR2, false);
 console.log('Quota exhaustion and database failures reject before R2 access');
 
 assert.equal(validateFile(new File([new Uint8Array(20 * 1024 * 1024)], 'boundary.mp4')), 'video/mp4');
-for (const deniedKey of ['user-day:', 'day:', 'storage']) {
+for (const deniedKey of ['user-day:', 'day:', 'upload-month:', 'storage']) {
   let putCalled = false;
   const db = { prepare: () => ({ bind: (key) => ({ first: async () => key.startsWith(deniedKey) ? null : { id: key } }) }) };
   const body = new FormData(); body.set('file', new File(['{}'], 'quota.json'));
   const result = await worker.fetch(new Request('https://example.com/api/files', { method: 'POST', headers: { Cookie: 'animax_session=' + 'b'.repeat(64), Origin: 'https://example.com' }, body }), { DB: db, FILES: { put: () => { putCalled = true; } } });
   assert.equal(result.status, 429);
-  assert.match((await result.json()).error, deniedKey === 'storage' ? /站点存储份额已满/ : /今日上传的份额已经满了/);
+  assert.match((await result.json()).error, deniedKey === 'storage' ? /站点存储份额已满/ : deniedKey === 'upload-month:' ? /本月上传份额已满/ : /今日上传的份额已经满了/);
   assert.equal(putCalled, false);
 }
 console.log('20 MiB boundary and user/IP/global upload quota rejection passed');
@@ -57,5 +57,24 @@ const exhausted = await worker.fetch(seedUpload(),realEnv);
 assert.equal(exhausted.status,429);
 assert.match((await exhausted.json()).error,/今日上传的份额已经满了/);
 assert.equal(writes,2);
+sqlite.exec("UPDATE quotas SET bytes = 0 WHERE id LIKE 'user-day:%' OR id LIKE 'day:%'");
+sqlite.exec("UPDATE quotas SET bytes = 9999999998 WHERE id LIKE 'upload-month:%'");
+assert.equal((await worker.fetch(seedUpload(), realEnv)).status, 201, 'Exactly 10 GB monthly is allowed');
+const monthlyResults = await Promise.all(Array.from({length: 4}, () => worker.fetch(seedUpload(), realEnv)));
+for (const result of monthlyResults) {
+  assert.equal(result.status, 429);
+  assert.match((await result.json()).error, /本月上传份额已满/);
+}
+assert.equal(writes, 3, 'Monthly exhaustion must not write to R2');
+sqlite.exec("UPDATE quotas SET bytes = 0 WHERE id LIKE 'upload-month:%'");
+sqlite.exec("UPDATE quotas SET bytes = 8589934592 WHERE id = 'storage'");
+assert.equal((await worker.fetch(seedUpload(), realEnv)).status, 429, 'Resetting monthly quota must not reset lifetime storage');
+assert.equal(writes, 3);
+// Migration initializes historical usage and is safe to repeat.
+sqlite.exec("DELETE FROM quotas WHERE id LIKE 'upload-month:%'");
+const migration = readFileSync(new URL('../migrations/0002_monthly_upload_quota.sql', import.meta.url), 'utf8');
+sqlite.exec(migration); sqlite.exec(migration);
+assert.equal(sqlite.prepare("SELECT SUM(bytes) AS bytes FROM quotas WHERE id LIKE 'upload-month:%'").get().bytes, 6);
 sqlite.close();
+console.log('Monthly 10 GB boundary, concurrent rejections, lifetime cap and historical backfill passed');
 console.log('Real SQLite quota boundary: exactly 200 MiB accepted, next upload rejected');

@@ -91,6 +91,7 @@ export default {
       await reserve(env.DB, `user-day:${day}:${owner}`, file.size, 200 * 1024 * 1024, 1000, dailyMessage);
       // Also cap the IP so clearing cookies alone cannot bypass the daily limit.
       await reserve(env.DB, `day:${day}:${ip}`, file.size, 200 * 1024 * 1024, 1000, dailyMessage);
+      await reserve(env.DB, `upload-month:${day.slice(0, 7)}`, file.size, 10_000_000_000, 100000, '本月上传份额已满（全站每月上限 10 GB），请下月再试');
       // ponytail: a conservative lifetime 8 GiB ceiling; add garbage collection before raising it.
       await reserve(env.DB, 'storage', file.size, 8 * 1024 ** 3, 100000, '站点存储份额已满，暂时停止上传，请联系管理员');
       const id = crypto.randomUUID();
