@@ -1,3 +1,4 @@
+import { cloudFetch } from '../services/cloudApi';
 import React, {
   createContext,
   startTransition,
@@ -2615,8 +2616,8 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const cloudSession = useRef<Promise<void> | null>(null);
   const ensureCloudSession = () => {
     if (!cloudSession.current) {
-      cloudSession.current = fetch('/api/session').then(async response => {
-        if (!response.ok) throw new Error('云端上传仅在 Cloudflare 部署中可用');
+      cloudSession.current = cloudFetch('/api/session').then(async response => {
+        if (!response.ok) throw new Error('云端服务暂时不可用');
         const result = await response.json();
         if (!result.ready) throw new Error('云端存储尚未配置');
       }).catch(error => { cloudSession.current = null; throw error; });
@@ -2628,7 +2629,7 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setPackageRecordsOpen(true);
     try {
       await ensureCloudSession();
-      const response = await fetch('/api/files');
+      const response = await cloudFetch('/api/files');
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || '读取记录失败');
       setPackageRecords(result.files);
@@ -3267,7 +3268,7 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     try {
       const id = new URL(url).pathname.split('/')[3];
       await ensureCloudSession();
-      const response = await fetch(`/api/files/${id}/hide`, { method: 'POST' });
+      const response = await cloudFetch(`/api/files/${id}/hide`, { method: 'POST' });
       if (!response.ok) throw new Error('移除记录失败');
       setPackageRecords(records => records.filter(item => item.url !== url));
       removeAnimaXCdnHistoryUrl(url);
@@ -3534,7 +3535,7 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     await ensureCloudSession();
     const form = new FormData();
     form.append('file', file, filename);
-    const res = await fetch('/api/files', { method: 'POST', body: form });
+    const res = await cloudFetch('/api/files', { method: 'POST', body: form });
     const data = await res.json();
     if (!res.ok || !data.url) throw new Error(data.error || `上传失败：HTTP ${res.status}`);
     return data.url as string;

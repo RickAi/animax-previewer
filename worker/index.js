@@ -5,7 +5,7 @@ const TYPES = { json: 'application/json', zip: 'application/zip', png: 'image/pn
 const json = (data, status = 200, headers = {}) => Response.json(data, { status, headers: { 'Cache-Control': 'no-store', ...headers } });
 const fail = (message, status) => { throw Object.assign(new Error(message), { status }); };
 const hash = async (value) => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))), b => b.toString(16).padStart(2, '0')).join('');
-const getSession = request => request.headers.get('Cookie')?.match(/(?:^|;\s*)animax_session=([a-f0-9]{64})(?:;|$)/)?.[1];
+const getSession = request => request.headers.get('Authorization')?.match(/^Bearer ([a-f0-9]{64})$/)?.[1] || request.headers.get('Cookie')?.match(/(?:^|;\s*)animax_session=([a-f0-9]{64})(?:;|$)/)?.[1];
 
 export function validateFile(file) {
   if (!(file instanceof File) || !file.size) fail('请选择非空文件', 400);
@@ -46,6 +46,26 @@ export default {
     await cleanupUnused(env, controller.scheduledTime);
   },
   async fetch(request, env) {
+    const origin = request.headers.get('Origin');
+    const allowed = origin === 'https://rickai.github.io' || origin === new URL(request.url).origin;
+    if (request.method === 'OPTIONS') {
+      return new Response(null, { status: allowed ? 204 : 403, headers: allowed ? {
+        'Access-Control-Allow-Origin': origin,
+        'Access-Control-Allow-Methods': 'GET, HEAD, POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+        'Access-Control-Max-Age': '86400',
+        'Vary': 'Origin',
+      } : {} });
+    }
+    const response = await handleRequest(request, env);
+    // Include CORS on errors too, so quota and expiry messages reach the UI.
+    const headers = new Headers(response.headers);
+    if (allowed) { headers.set('Access-Control-Allow-Origin', origin); headers.append('Vary', 'Origin'); }
+    return new Response(response.body, { status: response.status, headers });
+  },
+};
+
+async function handleRequest(request, env) {
     const url = new URL(request.url);
     const path = url.pathname;
     if (!path.startsWith('/api/')) return env.ASSETS.fetch(request);
@@ -87,7 +107,7 @@ export default {
         const { results } = await env.DB.prepare("SELECT id, name AS fileName, created_at AS createdAt FROM files WHERE owner = ? AND hidden = 0 AND deleting = 0 AND content_type = 'application/json' ORDER BY created_at DESC LIMIT 100").bind(owner).all();
         return json({ files: results.map(file => ({ ...file, url: `${url.origin}/api/objects/${file.id}/${encodeURIComponent(file.fileName)}` })) });
       }
-      if (request.headers.get('Origin') !== url.origin) return json({ error: '不允许跨站写入' }, 403);
+      if (![url.origin, 'https://rickai.github.io'].includes(request.headers.get('Origin'))) return json({ error: '不允许跨站写入' }, 403);
       const hideMatch = path.match(/^\/api\/files\/([0-9a-f-]{36})\/hide$/);
       if (hideMatch && request.method === 'POST') {
         await env.DB.prepare('UPDATE files SET hidden = 1 WHERE id = ? AND owner = ?').bind(hideMatch[1], owner).run();
@@ -126,5 +146,4 @@ export default {
       console.error('Storage operation failed', error.message);
       return json({ error: '存储服务暂时不可用，请稍后重试' }, 500);
     }
-  },
-};
+}

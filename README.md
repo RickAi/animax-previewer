@@ -99,9 +99,9 @@ https://rickai.github.io/animax-previewer/
 ## Cloudflare deployment
 
 The standalone UI is adapted from the September 2026 kal previewer. It uses
-**Workers Static Assets + Workers API + D1 + R2** in one deployment. Workers
-serves the Vite build as well as `/api/*`; a separate Pages project and mail
-service are unnecessary. All three public AnimaX packages remain version-aligned.
+**GitHub Pages frontend + Workers API + D1 + R2**. GitHub Actions deploys
+the frontend to https://rickai.github.io/animax-previewer/. Workers continues
+serving `/api/*` and the existing frontend address for compatibility. All three public AnimaX packages remain version-aligned.
 The internal CDN, internal fonts, AI assistant and private performance-check
 backend are not included. Optional browser video processing uses the pinned
 public FFmpeg 0.12.9 core from unpkg on demand.
@@ -146,8 +146,12 @@ npx wrangler dev --port 8795 --inspector-port 9395
 ```
 
 `npm run dev` alone only serves the frontend. Cloud uploads require the Worker.
-The existing GitHub Pages address redirects to the Cloudflare site, preserving
-share query parameters. Production: https://animax-previewer.yongbiaoai.workers.dev/
+GitHub Pages serves the frontend directly. Its API requests target the Worker
+with an anonymous random bearer identity stored in localStorage, without third-party
+cookies. CORS permits https://rickai.github.io; quota errors remain readable.
+Workers-hosted sessions still use their existing HttpOnly cookie. The two origins
+have separate upload histories; existing public share links continue working.
+Backend: https://animax-previewer.yongbiaoai.workers.dev/
 
 Additional policies to consider: require sign-in for a durable per-person quota
 (anonymous cookies and IPs cannot identify a person across devices/networks), and
