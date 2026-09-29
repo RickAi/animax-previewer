@@ -74,7 +74,7 @@ export const AnimaXUploadModal: React.FC = () => {
         </div>
 
         <div className="animax-modal-body animax-upload-body">
-          <p>文件将保存到云端；持有分享链接的人可以访问。请勿上传机密文件。单文件上限 25 MB。</p>
+          <p>文件将保存到云端；持有分享链接的人可以访问。请勿上传机密文件。单文件上限 20 MB；每个用户每日累计上限 200 MB（北京时间零点重置），同一 IP 共享每日限额。</p>
           <div
             role="button"
             tabIndex={0}

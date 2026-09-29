@@ -33,7 +33,7 @@ The package versions are currently pinned to `0.1.0-alpha.0` because this is a p
 
 ## Public Samples
 
-The checked-in samples under `public/samples/` are exported AnimaX/Lottie examples, including vector-only animations, image-backed animations, text/image compositions, and video-backed animations. These legacy files remain available, but the default and random examples now use the 17 Kal previewer examples mirrored in R2, including 23 image, video and font dependencies. Their JSON resource URLs all point to this site. R2 renewal is cancelled and scheduled to end on October 29, 2026; these links depend on R2 remaining available.
+The checked-in samples under `public/samples/` are exported AnimaX/Lottie examples, including vector-only animations, image-backed animations, text/image compositions, and video-backed animations. These legacy files remain available, but the default and random examples now use the 17 Kal previewer examples mirrored in R2, including 23 image, video and font dependencies. Their JSON resource URLs all point to this site. R2 renewal is active; these links depend on R2 remaining available.
 
 The internal sample URLs used by the original private previewer are intentionally not copied into this public repository. Many of those upstream examples are hosted on internal or company CDN/TOS domains and may include assets that should not be redistributed in an open-source repo.
 
@@ -115,7 +115,7 @@ public FFmpeg 0.12.9 core from unpkg on demand.
 - Records belong to a random HttpOnly browser cookie, not a user account. Clearing
   cookies loses access to that list; saved share links continue working. Hiding a
   record is reversible in D1 and does not delete the file or break its links.
-- Upload limits: 25 MiB/file, 200 MiB and 1,000 files/IP/day, 8 GiB lifetime
+- Upload limits: 20 MiB/file, 200 MiB and 1,000 files per browser session AND per IP/day (Asia/Shanghai midnight reset), 8 GiB lifetime
   storage reservation and 100,000 files for this app. R2 reads stop at 1,000,000
   operations/calendar month (including missing files and HEAD requests). All
   quota reservations are atomic D1 writes and happen before R2 access. If D1
@@ -148,3 +148,5 @@ npx wrangler dev --port 8795 --inspector-port 9395
 `npm run dev` alone only serves the frontend. Cloud uploads require the Worker.
 The existing GitHub Pages address redirects to the Cloudflare site, preserving
 share query parameters. Production: https://animax-previewer.yongbiaoai.workers.dev/
+
+Additional storage policies to consider: require sign-in for a durable per-person quota (anonymous cookies and IPs cannot identify a person across devices/networks); deduplicate identical uploads by content hash; expire temporary uploads after a clearly disclosed retention period; reserve a separate permanent quota for built-in samples. These policies are not enabled: expiry must preserve shared links and built-in examples. Current lifetime reservations intentionally do not reset when records are hidden or requests fail. Never clear the global storage counter while objects remain in R2.

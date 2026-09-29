@@ -666,6 +666,9 @@ const preparePreviewJsonText = (
 
 const isDirectoryAsset = (path: string) => /(^|\/)(images|videos|fonts)\//i.test(path);
 const RESOURCE_URL_VALIDATE_TIMEOUT_MS = 12000;
+const checkUploadSize = (file: Blob, name: string) => {
+  if (file.size > 20 * 1024 * 1024) throw new Error(`${name}：单文件不能超过 20 MB`);
+};
 
 const attachRelativePath = (file: File, relPath: string) => {
   try {
@@ -2850,6 +2853,7 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const processZipFile = async (zipFile: File) => {
+    checkUploadSize(zipFile, zipFile.name);
     setDirectoryProgress({
       phase: 'scanning',
       title: '正在解压 ZIP',
@@ -3526,6 +3530,7 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const uploadToCdn = async (file: Blob, _uploadDir: string, filename: string) => {
+    checkUploadSize(file, filename);
     await ensureCloudSession();
     const form = new FormData();
     form.append('file', file, filename);
@@ -3787,6 +3792,7 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     files: File[],
     options: UploadPickedDirectoryOptions = {},
   ) => {
+    files.forEach((file) => checkUploadSize(file, file.name));
     setDirectoryProgress({
       phase: 'scanning',
       title: '正在扫描目录',
@@ -4000,7 +4006,7 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         return { file: item.file, cdnUrl, relPath } as const;
       } catch (err) {
         pushLog(`[错误] 上传失败：${relPath}: ${(err as Error)?.message ?? String(err)}`);
-        return null;
+        throw err;
       } finally {
         if (progress) {
           completedUploads += 1;

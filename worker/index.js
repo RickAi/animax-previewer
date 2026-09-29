@@ -1,4 +1,4 @@
-const MAX_FILE = 25 * 1024 * 1024;
+const MAX_FILE = 20 * 1024 * 1024;
 const TYPES = { json: 'application/json', zip: 'application/zip', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', avif: 'image/avif', mp4: 'video/mp4', mov: 'video/quicktime', m4v: 'video/mp4', webm: 'video/webm', ttf: 'font/ttf', otf: 'font/otf', woff: 'font/woff', woff2: 'font/woff2' };
 const json = (data, status = 200, headers = {}) => Response.json(data, { status, headers: { 'Cache-Control': 'no-store', ...headers } });
 const fail = (message, status) => { throw Object.assign(new Error(message), { status }); };
@@ -7,7 +7,7 @@ const getSession = request => request.headers.get('Cookie')?.match(/(?:^|;\s*)an
 
 export function validateFile(file) {
   if (!(file instanceof File) || !file.size) fail('请选择非空文件', 400);
-  if (file.size > MAX_FILE) fail('单文件不能超过 25 MB', 413);
+  if (file.size > MAX_FILE) fail('单文件不能超过 20 MB', 413);
   if (file.name.length > 240 || /[\x00-\x1f/\\]/.test(file.name)) fail('文件名无效', 400);
   const type = TYPES[file.name.split('.').pop().toLowerCase()];
   if (!type) fail('不支持的文件类型', 415);
@@ -17,7 +17,7 @@ export function validateFile(file) {
 async function boundedForm(request) {
   if (!request.headers.get('Content-Type')?.startsWith('multipart/form-data;')) fail('需要文件表单', 415);
   const limit = MAX_FILE + 1024 * 1024;
-  if (Number(request.headers.get('Content-Length')) > limit) fail('文件过大', 413);
+  if (Number(request.headers.get('Content-Length')) > limit) fail('单文件不能超过 20 MB', 413);
   const reader = request.body?.getReader();
   if (!reader) fail('缺少文件', 400);
   const chunks = []; let size = 0;
@@ -25,18 +25,18 @@ async function boundedForm(request) {
     const { done, value } = await reader.read();
     if (done) break;
     size += value.byteLength;
-    if (size > limit) { await reader.cancel(); fail('文件过大', 413); }
+    if (size > limit) { await reader.cancel(); fail('单文件不能超过 20 MB', 413); }
     chunks.push(value);
   }
   try { return await new Response(new Blob(chunks), { headers: request.headers }).formData(); }
   catch { fail('文件表单无效', 400); }
 }
 
-async function reserve(db, key, size, maxBytes, maxCount) {
+async function reserve(db, key, size, maxBytes, maxCount, message = '免费使用额度已达到站点上限，请稍后再试或联系管理员') {
   const result = await db.prepare(`INSERT INTO quotas (id, bytes, count) VALUES (?, ?, 1)
     ON CONFLICT(id) DO UPDATE SET bytes = bytes + excluded.bytes, count = count + 1
     WHERE bytes + excluded.bytes <= ? AND count < ? RETURNING id`).bind(key, size, maxBytes, maxCount).first();
-  if (!result) fail('免费使用额度已达到站点上限，请稍后再试或联系管理员', 429);
+  if (!result) fail(message, 429);
 }
 
 export default {
@@ -85,11 +85,14 @@ export default {
       if (type === 'application/json') {
         try { JSON.parse(await file.text()); } catch { return json({ error: 'JSON 格式无效' }, 400); }
       }
-      const day = new Date().toISOString().slice(0, 10);
+      const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
       const ip = await hash(`${day}:${request.headers.get('CF-Connecting-IP') || 'local'}`);
-      await reserve(env.DB, `day:${day}:${ip}`, file.size, 200 * 1024 * 1024, 1000);
+      const dailyMessage = '今日上传的份额已经满了（每日累计上限 200 MB），请明天再试';
+      await reserve(env.DB, `user-day:${day}:${owner}`, file.size, 200 * 1024 * 1024, 1000, dailyMessage);
+      // Also cap the IP so clearing cookies alone cannot bypass the daily limit.
+      await reserve(env.DB, `day:${day}:${ip}`, file.size, 200 * 1024 * 1024, 1000, dailyMessage);
       // ponytail: a conservative lifetime 8 GiB ceiling; add garbage collection before raising it.
-      await reserve(env.DB, 'storage', file.size, 8 * 1024 ** 3, 100000);
+      await reserve(env.DB, 'storage', file.size, 8 * 1024 ** 3, 100000, '站点存储份额已满，暂时停止上传，请联系管理员');
       const id = crypto.randomUUID();
       await env.FILES.put(id, file.stream(), { httpMetadata: { contentType: type } });
       try {
