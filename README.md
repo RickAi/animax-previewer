@@ -29,7 +29,7 @@ This previewer uses the public AnimaX Web packages from npm:
 - `@lynx-js/animax-textra`: the optional Textra text layout WebAssembly module.
 - `@lynx-js/animax-video`: the optional video playback WebAssembly module.
 
-The package versions are currently pinned to `0.1.0-alpha.0` because this is a personal preview build.
+The package versions are currently pinned to `1.0.17-alpha.2` because this is a personal preview build.
 
 ## Public Samples
 
@@ -115,7 +115,7 @@ public FFmpeg 0.12.9 core from unpkg on demand.
 - Records belong to a random HttpOnly browser cookie, not a user account. Clearing
   cookies loses access to that list; saved share links continue working. Hiding a
   record is reversible in D1 and does not delete the file or break its links.
-- Upload limits: 20 MiB/file, 200 MiB and 1,000 files per browser session AND per IP/day (Asia/Shanghai midnight reset), 8 GiB lifetime
+- Upload limits: 20 MiB/file, 200 MiB and 1,000 files per browser session AND per IP/day (Asia/Shanghai midnight reset), 8 GiB total
   storage reservation and 100,000 files for this app. An additional backend cap rejects uploads that would exceed 10,000,000,000 bytes of total uploads per Shanghai calendar month; existing uploads are backfilled. Monthly rollover does not reset the lifetime storage cap. R2 reads stop at 1,000,000
   operations/calendar month (including missing files and HEAD requests). All
   quota reservations are atomic D1 writes and happen before R2 access. If D1
@@ -149,6 +149,31 @@ npx wrangler dev --port 8795 --inspector-port 9395
 The existing GitHub Pages address redirects to the Cloudflare site, preserving
 share query parameters. Production: https://animax-previewer.yongbiaoai.workers.dev/
 
-Additional storage policies to consider: require sign-in for a durable per-person quota (anonymous cookies and IPs cannot identify a person across devices/networks); deduplicate identical uploads by content hash; expire temporary uploads after a clearly disclosed retention period; reserve a separate permanent quota for built-in samples. These policies are not enabled: expiry must preserve shared links and built-in examples. Current lifetime reservations intentionally do not reset when records are hidden or requests fail. Never clear the global storage counter while objects remain in R2.
+Additional policies to consider: require sign-in for a durable per-person quota
+(anonymous cookies and IPs cannot identify a person across devices/networks), and
+deduplicate identical uploads by content hash. These are not enabled. Monthly
+inactive-resource cleanup is described below. Storage reservations do not reset
+when records are hidden or requests fail. Cleanup releases storage only after
+confirmed object deletion; daily/monthly upload counters are never refunded.
+Never clear the global storage counter while objects remain in R2.
 
 Global Textra font fallback matches Kal: 12 families (Noto Sans SC, Thai, Bengali, Kannada, Gujarati, Devanagari, Telugu, Malayalam, Oriya, Arabic, Hebrew and Noto Emoji). All font files are mirrored in R2 and registered through `configureFonts` before the player mounts; the default is Kal’s `NotoSansSC-fallback.ttf`.
+
+## Inactive resource cleanup
+
+Cloudflare Cron Triggers run in batches of at most 500 objects each minute on the
+1st of each month, 08:00–23:59 Asia/Shanghai. User files whose last observed access
+was more than 30 days ago are permanently deleted; expired share links return 404.
+Uploads and GET/HEAD downloads count as use; listing or hiding records does not.
+Reading JSON also refreshes its transitive cloud dependencies, including cached
+images/videos/fonts. JSON reads backfill dependency records for older uploads.
+User files revalidate their browser cache, and preview source downloads bypass old
+immutable cache entries. A page left open without network activity does not count
+as continued use. Existing files receive a fresh 30-day grace period at migration.
+
+The 52 migrated Kal sample/font objects are explicitly protected. New built-in
+resources must be marked protected in a migration before being added to the UI.
+Deletion first atomically claims stale rows, then deletes R2 objects, then removes
+D1 metadata. Failures leave claimed rows for retry; only successful metadata deletion
+refunds the storage reservation, exactly once. Daily/monthly upload and request
+quotas are unchanged. No immediate production deletion is part of deployment.

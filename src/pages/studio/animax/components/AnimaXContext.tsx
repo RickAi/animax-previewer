@@ -2766,7 +2766,7 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const validateFontResourceUrl = async (url: string) => {
     if (!('FontFace' in window)) {
-      const response = await fetch(url, { method: 'HEAD' });
+      const response = await fetch(url, { method: 'HEAD', cache: 'no-cache' });
       if (!response.ok) throw new Error(createResourceValidationError('font'));
       return;
     }
@@ -2827,7 +2827,7 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const fetchRemoteFile = async (url: string) => {
-    const response = await fetch(url);
+    const response = await fetch(url, { cache: 'no-cache' });
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
@@ -2841,7 +2841,7 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const fetchRemoteText = async (url: string) => {
-    const response = await fetch(url);
+    const response = await fetch(url, { cache: 'no-cache' });
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
@@ -3130,7 +3130,7 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       return;
     }
 
-    const response = await fetch(url);
+    const response = await fetch(url, { cache: 'no-cache' });
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
@@ -4850,7 +4850,7 @@ export const AnimaXProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           title: '正在下载远程 JSON',
           detail: getUrlFileName(url, 'remote.json'),
         });
-        const res = await fetch(url, { signal: controller.signal });
+        const res = await fetch(url, { signal: controller.signal, cache: 'no-cache' });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const text = await res.text();
         if (!alive) return;

@@ -7,7 +7,7 @@
     "dev": "vite --host 0.0.0.0",
     "build": "tsc && vite build",
     "preview": "vite preview --host 0.0.0.0",
-    "test": "node tests/storage.test.mjs",
+    "test": "node tests/storage.test.mjs && node tests/retention.test.mjs",
     "deploy": "wrangler d1 migrations apply DB --remote && wrangler deploy",
     "dev:cloud": "wrangler dev"
   },

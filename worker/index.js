@@ -1,3 +1,5 @@
+import { cleanupUnused, recordDependencies, touchFile } from './retention.js';
+
 const MAX_FILE = 20 * 1024 * 1024;
 const TYPES = { json: 'application/json', zip: 'application/zip', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', avif: 'image/avif', mp4: 'video/mp4', mov: 'video/quicktime', m4v: 'video/mp4', webm: 'video/webm', ttf: 'font/ttf', otf: 'font/otf', woff: 'font/woff', woff2: 'font/woff2' };
 const json = (data, status = 200, headers = {}) => Response.json(data, { status, headers: { 'Cache-Control': 'no-store', ...headers } });
@@ -40,6 +42,9 @@ async function reserve(db, key, size, maxBytes, maxCount, message = '免费使�
 }
 
 export default {
+  async scheduled(controller, env) {
+    await cleanupUnused(env, controller.scheduledTime);
+  },
   async fetch(request, env) {
     const url = new URL(request.url);
     const path = url.pathname;
@@ -55,21 +60,31 @@ export default {
       const objectMatch = path.match(/^\/api\/objects\/([0-9a-f-]{36})\/[^/]+$/);
       if (objectMatch && ['GET', 'HEAD'].includes(request.method)) {
         await reserve(env.DB, `reads:${new Date().toISOString().slice(0, 7)}`, 0, 0, 1000000);
+        const now = Date.now();
+        const { results } = await touchFile(env.DB, objectMatch[1], now);
+        const file = results.find(file => file.id === objectMatch[1]);
+        if (!file) return json({ error: '文件不存在或已过期清理' }, 404);
         const object = await env.FILES.get(objectMatch[1]);
         if (!object) return json({ error: '文件不存在' }, 404);
+        let body = object.body;
+        if (file.content_type === 'application/json') {
+          const text = await object.text();
+          await recordDependencies(env.DB, file.id, JSON.parse(text), now);
+          body = text;
+        }
         const headers = new Headers(); object.writeHttpMetadata(headers);
         headers.set('ETag', object.httpEtag);
-        headers.set('Cache-Control', 'public, max-age=31536000, immutable');
+        headers.set('Cache-Control', file.protected ? 'public, max-age=31536000, immutable' : 'no-cache');
         headers.set('X-Content-Type-Options', 'nosniff');
         headers.set('Content-Security-Policy', "default-src 'none'; sandbox");
         headers.set('Access-Control-Allow-Origin', '*');
-        return new Response(request.method === 'HEAD' ? null : object.body, { headers });
+        return new Response(request.method === 'HEAD' ? null : body, { headers });
       }
       const session = getSession(request);
       if (!session) return json({ error: '请刷新页面后重试' }, 401);
       const owner = await hash(session);
       if (path === '/api/files' && request.method === 'GET') {
-        const { results } = await env.DB.prepare("SELECT id, name AS fileName, created_at AS createdAt FROM files WHERE owner = ? AND hidden = 0 AND content_type = 'application/json' ORDER BY created_at DESC LIMIT 100").bind(owner).all();
+        const { results } = await env.DB.prepare("SELECT id, name AS fileName, created_at AS createdAt FROM files WHERE owner = ? AND hidden = 0 AND deleting = 0 AND content_type = 'application/json' ORDER BY created_at DESC LIMIT 100").bind(owner).all();
         return json({ files: results.map(file => ({ ...file, url: `${url.origin}/api/objects/${file.id}/${encodeURIComponent(file.fileName)}` })) });
       }
       if (request.headers.get('Origin') !== url.origin) return json({ error: '不允许跨站写入' }, 403);
@@ -82,8 +97,9 @@ export default {
       const form = await boundedForm(request);
       const file = form.get('file');
       const type = validateFile(file);
+      let data;
       if (type === 'application/json') {
-        try { JSON.parse(await file.text()); } catch { return json({ error: 'JSON 格式无效' }, 400); }
+        try { data = JSON.parse(await file.text()); } catch { return json({ error: 'JSON 格式无效' }, 400); }
       }
       const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
       const ip = await hash(`${day}:${request.headers.get('CF-Connecting-IP') || 'local'}`);
@@ -92,12 +108,14 @@ export default {
       // Also cap the IP so clearing cookies alone cannot bypass the daily limit.
       await reserve(env.DB, `day:${day}:${ip}`, file.size, 200 * 1024 * 1024, 1000, dailyMessage);
       await reserve(env.DB, `upload-month:${day.slice(0, 7)}`, file.size, 10_000_000_000, 100000, '本月上传份额已满（全站每月上限 10 GB），请下月再试');
-      // ponytail: a conservative lifetime 8 GiB ceiling; add garbage collection before raising it.
+      // Conservative 8 GiB reservation; release only after confirmed cleanup.
       await reserve(env.DB, 'storage', file.size, 8 * 1024 ** 3, 100000, '站点存储份额已满，暂时停止上传，请联系管理员');
       const id = crypto.randomUUID();
       await env.FILES.put(id, file.stream(), { httpMetadata: { contentType: type } });
       try {
-        await env.DB.prepare('INSERT INTO files (id, owner, name, size, content_type, created_at) VALUES (?, ?, ?, ?, ?, ?)').bind(id, owner, file.name, file.size, type, Date.now()).run();
+        const now = Date.now();
+        await env.DB.prepare('INSERT INTO files (id, owner, name, size, content_type, created_at, last_accessed_at) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(id, owner, file.name, file.size, type, now, now).run();
+        if (data !== undefined) await recordDependencies(env.DB, id, data, now);
       } catch (error) {
         await env.FILES.delete(id);
         throw error;

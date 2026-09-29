@@ -40,8 +40,10 @@ const { DatabaseSync } = await import('node:sqlite');
 const { readFileSync } = await import('node:fs');
 const sqlite = new DatabaseSync(':memory:');
 sqlite.exec(readFileSync(new URL('../migrations/0001_files.sql', import.meta.url), 'utf8'));
+sqlite.exec(readFileSync(new URL('../migrations/0003_retention.sql', import.meta.url), 'utf8'));
 const realDB = { prepare: sql => ({ bind: (...args) => ({
   first: async () => sqlite.prepare(sql).get(...args),
+  all: async () => ({ results: sqlite.prepare(sql).all(...args) }),
   run: async () => sqlite.prepare(sql).run(...args),
 }) }) };
 const seedUpload = () => {
